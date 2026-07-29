@@ -1,5 +1,7 @@
 # Team Charter — Evolution Lab
 
+> **Dokument historyczny:** charter dotyczył zakończonej fazy discovery. Aktualny stan procesu opisuje [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+
 ## Cel zespołu
 
 Zespół ma przeprowadzić projekt od nieuporządkowanego pomysłu do spójnego, wykonalnego planu produktu. W fazie discovery jego wynikiem są decyzje, warianty, ryzyka i roadmapa — nie kod aplikacji.
@@ -231,4 +233,3 @@ Po każdym większym milestone zespół odpowiada:
 - Które role lub artefakty były zbędne?
 - Czy review znalazło problemy istotne dla wyniku?
 - Jak uprościć następny etap bez utraty jakości?
-

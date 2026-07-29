@@ -1,0 +1,19 @@
+{
+  "name": "evolution-lab-t0-browser-prototype",
+  "version": "0.0.0-t0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "t0": "vite --host 127.0.0.1",
+    "check": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@dimforge/rapier2d": "0.19.3",
+    "planck": "1.5.0"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.1.5"
+  }
+}

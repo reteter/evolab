@@ -1,5 +1,7 @@
 # Discovery Process — Evolution Lab
 
+> **Dokument historyczny:** opisuje zakończony proces discovery. Aktualny workflow i bramki znajdują się w [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+
 ## Cel procesu
 
 Discovery ma przekształcić wizję Evolution Lab w uzgodniony plan pierwszego pionowego wycinka. Proces ma zredukować najważniejsze niewiadome produktowe, edukacyjne, algorytmiczne i techniczne przed rozpoczęciem implementacji.
@@ -197,25 +199,25 @@ Roadmapa ma składać się z pionowych wycinków, które dają obserwowalny rezu
 
 Rekomendowany punkt wyjścia do weryfikacji:
 
-1. **M1 — deterministyczna próba jednego pojazdu**  
+1. **M1 — deterministyczna próba jednego pojazdu**
    Genom tworzy widoczny pojazd, który próbuje pokonać stałą trasę; wynik można odtworzyć.
 
-2. **M2 — populacja i jawny fitness**  
+2. **M2 — populacja i jawny fitness**
    Wiele osobników jest ocenianych według prostych, widocznych kryteriów.
 
-3. **M3 — selekcja i mutacja**  
+3. **M3 — selekcja i mutacja**
    Powstaje następne pokolenie, a użytkownik może prześledzić pochodzenie i zmianę cech.
 
-4. **M4 — obserwacja trendów i różnorodności**  
+4. **M4 — obserwacja trendów i różnorodności**
    Użytkownik widzi najlepszy i średni fitness oraz zmianę populacji.
 
-5. **M5 — kontrolowane eksperymenty**  
+5. **M5 — kontrolowane eksperymenty**
    Można zmieniać wybrane parametry, używać seedów i porównywać przebiegi.
 
-6. **M6 — rozszerzenia algorytmu**  
+6. **M6 — rozszerzenia algorytmu**
    Krzyżowanie, dodatkowe strategie selekcji lub bardziej złożony fitness są dodawane tylko po walidacji rdzenia.
 
-7. **M7 — rozszerzenia świata**  
+7. **M7 — rozszerzenia świata**
    Proceduralne trasy, edytor lub kolejne laboratoria trafiają tu dopiero po osobnej decyzji.
 
 Każdy milestone zawiera:
@@ -276,4 +278,3 @@ Projekt jest gotowy do planowania implementacji dopiero, gdy:
 - kluczowe ryzyka mają małe eksperymenty redukujące niepewność;
 - wiadomo, co świadomie nie wchodzi do pierwszej wersji;
 - zespół potrafi utworzyć pierwsze zadania jako pionowe wycinki, a nie warstwy infrastruktury.
-

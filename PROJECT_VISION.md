@@ -1,8 +1,10 @@
 # Project Vision — Evolution Lab
 
+> **Dokument historyczny.** To wizja startowa sprzed discovery. Aktualny kierunek po G0-P opisuje [`docs/PROJECT_VISION.md`](docs/PROJECT_VISION.md): ciągła, autonomiczna ewolucja pojazdów inspirowana BoxCar2D, z nauką jako efektem drugorzędnym.
+
 ## Status dokumentu
 
-- Etap: założenia startowe przed discovery
+- Etap: założenia startowe przed discovery; zastąpione 2026-07-29
 - Właściciel produktu: użytkownik projektu
 - Charakter dokumentu: kierunek i ograniczenia, nie specyfikacja implementacyjna
 - Zasada zmian: istotne zmiany celów wymagają jawnej decyzji właściciela
@@ -162,4 +164,3 @@ Discovery powinno co najmniej odpowiedzieć na pytania:
 - Jak porównywać eksperymenty z różnymi konfiguracjami?
 - Które elementy wyjaśniać automatycznie, a które pozostawić do eksploracji?
 - Jaki stack najlepiej wspiera interaktywną fizykę, wykresy, deterministyczne testy i dalszy rozwój?
-

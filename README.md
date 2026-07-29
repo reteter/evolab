@@ -1,78 +1,92 @@
-# Evolution Lab — pakiet startowy
+# Evolution Lab
 
-Evolution Lab to projekt niewielkiego, interaktywnego laboratorium algorytmów ewolucyjnych. Pierwszym eksperymentem będzie symulacja pojazdów inspirowana ideą BoxCar2D: populacja konstrukcji próbuje pokonać trasę, a kolejne pokolenia powstają przez selekcję, dziedziczenie i mutacje.
+## Aktualny kierunek
 
-Projekt ma trzy równorzędne cele:
+Evolution Lab ma być ciągłą symulacją ewolucji pojazdów inspirowaną BoxCar2D.
 
-1. stworzyć przystępne laboratorium, w którym ewolucję można obserwować i kontrolować;
-2. nauczyć właściciela projektu praktycznego działania algorytmów genetycznych;
-3. wypracować oszczędny i skuteczny workflow współpracy z agentami AI.
+Użytkownik ustawia seed, populację, mutację i elity, uruchamia przebieg, a następnie obserwuje automatyczne kolejne pokolenia tak długo, jak chce. Może użyć pauzy, przyspieszenia, trybu bez renderowania, replayu najlepszego i stopu.
 
-Ten pakiet nie zawiera kodu aplikacji ani gotowych decyzji technicznych. Służy do przeprowadzenia discovery, porównania wariantów i przygotowania projektu do świadomej decyzji o rozpoczęciu implementacji.
+Nie wybiera rodziców ręcznie. Konfiguracja jest zamrożona dla przebiegu, a jej zmiana uruchamia nową populację.
 
-## Zawartość
+## Status — 2026-07-29
 
-```text
-Evolution_Lab_Starter_Pack/
-├── README.md
-├── PROJECT_VISION.md
-├── TEAM_CHARTER.md
-├── DISCOVERY_PROCESS.md
-└── ORCHESTRATOR_PROMPT.md
-```
+- Discovery analityczne: zakończone.
+- G0-P: zakończone pivotem od „Hodowcy jednej linii”.
+- Zakres ciągłej symulacji: zaakceptowany przez właściciela.
+- T0: zakończone.
+- Platforma: kierunek browser-first; Godot wykluczony decyzją właściciela.
+- Adapter fizyki: Planck.js 1.5.0 zatwierdzony przez właściciela.
+- Zakres powtarzalności: ten sam zachowany build i runtime; zatwierdzony.
+- Budżety M1–M4: zatwierdzone przez właściciela.
+- G1: GO udzielone przez właściciela.
+- M1–M4: zaimplementowane i zweryfikowane.
+- Następna bramka: G2-P — playtest i wybór jednego dalszego kierunku.
 
-- `PROJECT_VISION.md` — definiuje problem, cele, odbiorców, kryteria sukcesu i granice projektu.
-- `TEAM_CHARTER.md` — opisuje role, odpowiedzialności i reguły oszczędnego delegowania pracy.
-- `DISCOVERY_PROCESS.md` — prowadzi zespół od pytań otwartych do rekomendacji, roadmapy i bramki decyzyjnej.
-- `ORCHESTRATOR_PROMPT.md` — zawiera gotowy prompt uruchamiający pierwszą sesję discovery.
+Aktualny raport: [`docs/DECISION_BRIEF.md`](docs/DECISION_BRIEF.md).
 
-## Jak rozpocząć
-
-1. Utwórz nowe, puste repozytorium, na przykład `evolution-lab`.
-2. Skopiuj pięć plików z tego pakietu do katalogu głównego repozytorium.
-3. Zainicjalizuj Git i zapisz pierwszy commit, na przykład:
-
-   ```text
-   chore: initialize Evolution Lab discovery workspace
-   ```
-
-4. Otwórz repozytorium w Codexie.
-5. Wklej treść sekcji „Prompt do uruchomienia” z pliku `ORCHESTRATOR_PROMPT.md`.
-6. Pozwól Orchestratorowi przeprowadzić discovery, ale nie zatwierdzaj implementacji przed otrzymaniem raportu decyzyjnego.
-
-## Oczekiwany rezultat discovery
-
-Po zakończeniu discovery repozytorium powinno zawierać uzgodniony zestaw dokumentów:
+## Pętla
 
 ```text
-docs/
-├── PROJECT_VISION.md
-├── PRD.md
-├── ROADMAP.md
-├── ARCHITECTURE_OPTIONS.md
-├── GENETIC_ALGORITHM_DESIGN.md
-├── LEARNING_EXPERIENCE.md
-├── RISK_REGISTER.md
-├── DECISION_BRIEF.md
-└── WORKFLOW.md
+konfiguracja
+→ populacja
+→ próby
+→ ranking
+→ elity + rodzice
+→ krzyżowanie + mutacja
+→ następne pokolenie
+→ ... do decyzji użytkownika
 ```
 
-Nazwy mogą zostać nieznacznie zmienione, jeśli Orchestrator przedstawi dobry powód. Ważniejsza od struktury katalogów jest kompletność decyzji.
+## Dokumentacja
 
-## Bramka przed implementacją
+- [`CONTEXT.md`](CONTEXT.md) — kanoniczny słownik domeny;
+- [`docs/PROJECT_VISION.md`](docs/PROJECT_VISION.md) — wizja i granica produktu;
+- [`docs/PRD.md`](docs/PRD.md) — wymagania ciągłej symulacji;
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — T0, G1 i droga M1–M4;
+- [`docs/GENETIC_ALGORITHM_DESIGN.md`](docs/GENETIC_ALGORITHM_DESIGN.md) — automatyczna ewolucja;
+- [`docs/ARCHITECTURE_OPTIONS.md`](docs/ARCHITECTURE_OPTIONS.md) — porównanie technologii;
+- [`docs/t0/T0_BROWSER_RESULT.md`](docs/t0/T0_BROWSER_RESULT.md) — pomiary i rekomendacja T0;
+- [`docs/adr/0001-use-planck-js-for-vehicle-physics.md`](docs/adr/0001-use-planck-js-for-vehicle-physics.md) — decyzja o adapterze;
+- [`docs/adr/0002-bound-repeatability-to-same-build-and-runtime.md`](docs/adr/0002-bound-repeatability-to-same-build-and-runtime.md) — granica powtarzalności;
+- [`docs/t0/T0_BUDGET_PROPOSAL.md`](docs/t0/T0_BUDGET_PROPOSAL.md) — zatwierdzone budżety M1–M4;
+- [`docs/adr/0003-accept-v0-performance-and-retention-budgets.md`](docs/adr/0003-accept-v0-performance-and-retention-budgets.md) — decyzja o budżetach;
+- [`docs/G1_IMPLEMENTATION_BRIEF.md`](docs/G1_IMPLEMENTATION_BRIEF.md) — porównanie stosu i zakres decyzji G1;
+- [`docs/adr/0004-approve-production-stack-and-m1-m4.md`](docs/adr/0004-approve-production-stack-and-m1-m4.md) — zgoda na stos i implementację;
+- [`docs/M1_M4_IMPLEMENTATION_REPORT.md`](docs/M1_M4_IMPLEMENTATION_REPORT.md) — wynik, pomiary i review;
+- [`docs/LEARNING_EXPERIENCE.md`](docs/LEARNING_EXPERIENCE.md) — opcjonalna warstwa zrozumienia;
+- [`docs/RISK_REGISTER.md`](docs/RISK_REGISTER.md) — aktualne ryzyka;
+- [`docs/WORKFLOW.md`](docs/WORKFLOW.md) — bramki i stan procesu.
 
-Discovery kończy się krótkim raportem dla właściciela projektu. Raport musi przedstawiać:
+Zapis G0-P znajduje się w [`docs/playtests/`](docs/playtests/), a historyczne materiały discovery w [`docs/discovery/`](docs/discovery/).
 
-- rekomendowany zakres pierwszego pionowego wycinka;
-- alternatywy techniczne i rekomendowany kierunek;
-- proponowaną reprezentację genomu i funkcję fitness;
-- sposób pokazania selekcji, dziedziczenia i mutacji;
-- roadmapę i najważniejsze ryzyka;
-- pytania, których nie powinien rozstrzygać sam zespół AI.
+## Granica v0
 
-Do czasu akceptacji raportu nie należy tworzyć kodu produkcyjnego, scaffoldu aplikacji, zależności, migracji ani backlogu implementacyjnego o fałszywej precyzji.
+W pierwszej wersji są:
 
-## Zasada przewodnia
+- długi teren generowany z seedu;
+- geometryczny pojazd o stałej topologii i dwóch kołach;
+- automatyczne pokolenia bez limitu;
+- elity, dobór rodziców, proste krzyżowanie i mutacja;
+- podstawowe ustawienia, wykres i replay najlepszego.
 
-Najpierw należy udowodnić, że mała, deterministyczna symulacja potrafi w czytelny sposób pokazać zmianę populacji między pokoleniami. Dopiero później warto rozwijać edytor pojazdów, proceduralne trasy, rozbudowaną fizykę i kolejne laboratoria.
+Nie ma edytora, ręcznego wyboru rodziców, zmiennej liczby kół, wielu światów, zapisu populacji, kampanii, backendu ani obowiązkowego kursu.
 
+## Kolejna bramka
+
+M1–M4 tworzą grywalną wersję kierunkową. Następny jest playtest G2-P, który
+ma wybrać najwyżej jeden dalszy kierunek albo uzasadniony stop.
+
+## Uruchomienie
+
+```text
+npm install
+npm run dev
+```
+
+Kontrola jakości:
+
+```text
+npm test
+npm run verify:budgets
+npm run build
+```

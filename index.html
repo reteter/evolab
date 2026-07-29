@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Evolution Lab — obserwuj, jak kolejne pokolenia pojazdów uczą się pokonywać teren."
+    />
+    <meta name="theme-color" content="#102728" />
+    <title>Evolution Lab</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#simulation-stage">Przejdź do symulacji</a>
+
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+          <div>
+            <p class="eyebrow">Obserwatorium pojazdów</p>
+            <h1>Evolution Lab</h1>
+          </div>
+        </div>
+        <div class="run-status" id="run-status" data-status="idle">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="run-status-text">Gotowy</span>
+        </div>
+      </header>
+
+      <main class="app-grid">
+        <aside class="panel setup-panel" aria-labelledby="setup-title">
+          <div class="panel-heading">
+            <div>
+              <p class="step-label">Ustaw przebieg</p>
+              <h2 id="setup-title">Punkt startu</h2>
+            </div>
+            <span class="panel-number" aria-hidden="true">01</span>
+          </div>
+
+          <form id="run-form" novalidate>
+            <fieldset id="config-fields">
+              <legend class="sr-only">Konfiguracja przebiegu</legend>
+
+              <label class="field field-seed" for="seed">
+                <span>Seed</span>
+                <span class="field-hint">ten sam seed — ten sam świat</span>
+                <span class="input-action">
+                  <input
+                    id="seed"
+                    name="seed"
+                    type="text"
+                    value="evolab-42"
+                    maxlength="80"
+                    autocomplete="off"
+                    required
+                  />
+                  <button class="button button-small" id="random-seed" type="button">
+                    Losuj
+                  </button>
+                </span>
+              </label>
+
+              <div class="field-row">
+                <label class="field" for="population">
+                  <span>Populacja</span>
+                  <span class="field-hint">4–80 pojazdów</span>
+                  <input
+                    id="population"
+                    name="population"
+                    type="number"
+                    value="20"
+                    min="4"
+                    max="80"
+                    step="1"
+                    required
+                  />
+                </label>
+
+                <label class="field" for="elites">
+                  <span>Elity</span>
+                  <span class="field-hint">najlepsi bez zmian</span>
+                  <input
+                    id="elites"
+                    name="elites"
+                    type="number"
+                    value="1"
+                    min="0"
+                    max="19"
+                    step="1"
+                    required
+                  />
+                </label>
+              </div>
+
+              <label class="field field-range" for="mutation-rate">
+                <span>
+                  Częstość mutacji
+                  <output id="mutation-rate-output" for="mutation-rate">18%</output>
+                </span>
+                <input
+                  id="mutation-rate"
+                  name="mutationRate"
+                  type="range"
+                  value="18"
+                  min="0"
+                  max="100"
+                  step="1"
+                />
+              </label>
+
+              <label class="field field-range" for="mutation-strength">
+                <span>
+                  Siła mutacji
+                  <output id="mutation-strength-output" for="mutation-strength">14%</output>
+                </span>
+                <input
+                  id="mutation-strength"
+                  name="mutationStrength"
+                  type="range"
+                  value="14"
+                  min="0"
+                  max="50"
+                  step="1"
+                />
+              </label>
+            </fieldset>
+
+            <p class="form-error" id="form-error" role="alert"></p>
+            <button class="button button-primary button-start" id="start-run" type="submit">
+              <span>Uruchom przebieg</span>
+              <span aria-hidden="true">→</span>
+            </button>
+            <p class="form-note">
+              Ustawienia są zamrożone po starcie. Zmienisz je w nowym przebiegu.
+            </p>
+          </form>
+
+          <div class="run-summary" id="run-summary" hidden>
+            <p class="step-label">Ostatni przebieg</p>
+            <strong id="summary-result">—</strong>
+            <span id="summary-detail">—</span>
+          </div>
+        </aside>
+
+        <section
+          class="panel stage-panel"
+          id="simulation-stage"
+          aria-labelledby="stage-title"
+        >
+          <div class="stage-heading">
+            <div>
+              <p class="step-label">Obserwuj</p>
+              <h2 id="stage-title">Próba na żywo</h2>
+            </div>
+            <div class="candidate-label">
+              <span id="candidate-id">Jeszcze bez pojazdu</span>
+              <span id="candidate-progress">— / —</span>
+            </div>
+          </div>
+
+          <div class="canvas-frame">
+            <canvas
+              id="simulation-canvas"
+              width="1200"
+              height="680"
+              role="img"
+              aria-label="Pusta trasa. Uruchom przebieg, aby zobaczyć pojazd."
+            ></canvas>
+            <div class="canvas-vignette" aria-hidden="true"></div>
+            <div class="distance-hud">
+              <span>Dystans</span>
+              <strong id="current-distance">0,0 m</strong>
+            </div>
+            <div class="headless-overlay" id="headless-overlay" hidden>
+              <span class="headless-pulse" aria-hidden="true"></span>
+              <strong>Liczymy bez obrazu</strong>
+              <span>więcej pokoleń, te same wyniki</span>
+            </div>
+          </div>
+
+          <div class="transport" aria-label="Sterowanie przebiegiem">
+            <button class="button button-control" id="pause-run" type="button" disabled>
+              Pauza
+            </button>
+
+            <div class="mode-switcher" role="group" aria-label="Tempo przebiegu">
+              <button class="mode-button is-active" data-mode="normal" type="button" aria-pressed="true">
+                1×
+                <span>obserwuj</span>
+              </button>
+              <button class="mode-button" data-mode="fast" type="button" aria-pressed="false">
+                10×
+                <span>szybko</span>
+              </button>
+              <button class="mode-button" data-mode="headless" type="button" aria-pressed="false">
+                ∞
+                <span>bez obrazu</span>
+              </button>
+            </div>
+
+            <button class="button button-control" id="replay-best" type="button" disabled>
+              Replay rekordu
+            </button>
+            <button class="button button-danger" id="stop-run" type="button" disabled>
+              Stop
+            </button>
+          </div>
+
+          <p class="keyboard-hint">
+            Skróty: <kbd>spacja</kbd> pauza · <kbd>1</kbd> <kbd>2</kbd>
+            <kbd>3</kbd> tempo · <kbd>R</kbd> replay
+          </p>
+        </section>
+
+        <section class="metrics-panel" aria-labelledby="metrics-title">
+          <div class="metrics-heading">
+            <div>
+              <p class="step-label">Czytaj trend</p>
+              <h2 id="metrics-title">Przebieg</h2>
+            </div>
+            <span id="run-message" aria-live="polite">Gotowy do nowego przebiegu</span>
+          </div>
+
+          <dl class="metric-grid">
+            <div class="metric metric-accent">
+              <dt>Pokolenie</dt>
+              <dd id="generation-value">—</dd>
+              <span id="remaining-value">brak przebiegu</span>
+            </div>
+            <div class="metric">
+              <dt>Rekord przebiegu</dt>
+              <dd id="overall-best-value">0,0 m</dd>
+              <span id="record-genome">czeka na pojazd</span>
+            </div>
+            <div class="metric">
+              <dt>Najlepszy teraz</dt>
+              <dd id="generation-best-value">0,0 m</dd>
+              <span>w bieżącym pokoleniu</span>
+            </div>
+            <div class="metric">
+              <dt>Średnia teraz</dt>
+              <dd id="generation-average-value">0,0 m</dd>
+              <span>w bieżącym pokoleniu</span>
+            </div>
+          </dl>
+        </section>
+
+        <section class="panel trend-panel" aria-labelledby="trend-title">
+          <div class="panel-heading trend-heading">
+            <div>
+              <p class="step-label">Historia</p>
+              <h2 id="trend-title">Jak idzie populacji?</h2>
+            </div>
+            <div class="chart-legend" aria-hidden="true">
+              <span><i class="legend-best"></i> rekord</span>
+              <span><i class="legend-average"></i> średnia</span>
+            </div>
+          </div>
+
+          <p class="chart-description" id="chart-description">
+            Wykres pojawi się po ukończeniu pierwszego pokolenia.
+          </p>
+          <svg
+            id="trend-chart"
+            class="trend-chart"
+            viewBox="0 0 900 260"
+            role="img"
+            aria-labelledby="trend-title chart-description"
+            preserveAspectRatio="none"
+          ></svg>
+
+          <details class="data-table-wrap">
+            <summary>Dane ostatnich pokoleń</summary>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Pokolenie</th>
+                    <th scope="col">Rekord</th>
+                    <th scope="col">Średnia</th>
+                    <th scope="col">Najlepszy pojazd</th>
+                  </tr>
+                </thead>
+                <tbody id="trend-table-body">
+                  <tr>
+                    <td colspan="4">Brak ukończonych pokoleń.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </section>
+      </main>
+
+      <footer>
+        <span>Evolution Lab v0.1</span>
+        <span>Planck.js · bez konta · wszystko lokalnie</span>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "evolution-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:budgets": "vitest run src/verification/budgets.test.ts --reporter=verbose",
+    "build": "npm run check && vite build"
+  },
+  "dependencies": {
+    "planck": "1.5.0"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.1.5",
+    "vitest": "4.1.10"
+  }
+}

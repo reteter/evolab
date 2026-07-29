@@ -1,5 +1,7 @@
 # Początkowy prompt dla Orchestratora
 
+> **Dokument historyczny:** prompt został już wykonany. Nie opisuje aktualnego zadania ani zgody na dalsze prace; zobacz [`docs/DECISION_BRIEF.md`](docs/DECISION_BRIEF.md).
+
 ## Jak użyć
 
 Wklej poniższy prompt jako pierwsze zadanie w repozytorium zawierającym:
@@ -154,4 +156,3 @@ Orchestrator powinien rozpocząć od:
 5. proponowanych delegacji wraz z uzasadnieniem.
 
 Nie powinien prosić o zgodę na każdą drobną czynność. Powinien zatrzymać się dopiero wtedy, gdy brak decyzji właściciela istotnie zmieniałby rezultat lub zakres.
-
