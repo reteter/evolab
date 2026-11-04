@@ -4,10 +4,19 @@ export const FIXED_DELTA_SECONDS = 1 / 60;
 export const MAX_TRIAL_STEPS = 1_200;
 export const STAGNATION_STEPS = 240;
 export const TRACE_EVERY_STEPS = 4;
+export const FINISH_LINE_OFFSET_X = 8;
 
 export type RunMode = "normal" | "fast" | "headless";
 
 export type TerrainProfile = "smooth" | "steep-hills" | "bumpy";
+
+export type TrainingMode = "single" | "triple";
+
+export const TRIPLE_TRACK_PROFILES: readonly TerrainProfile[] = [
+  "smooth",
+  "steep-hills",
+  "bumpy"
+];
 
 export type WheelCountMode = "2" | "2-3" | "2-4";
 
@@ -20,6 +29,7 @@ export interface RunConfig {
   terrainProfile: TerrainProfile;
   difficulty: number;
   wheelCountMode: WheelCountMode;
+  trainingMode?: TrainingMode;
 }
 
 export interface RunManifest {
@@ -29,6 +39,8 @@ export interface RunManifest {
   rng: "mulberry32-fnv1a@1";
   world: "terrain-profiles@1";
   evolution: "rank-uniform-triangular@3";
+  scoringVersion?: "multi-track-harmonic-progress@1";
+  trackProfiles?: readonly TerrainProfile[];
   fixedDeltaSeconds: number;
   maxTrialSteps: number;
   stagnationSteps: number;
@@ -172,12 +184,31 @@ export interface GenerationSummary {
   completedTrials: number;
 }
 
+export interface TrackTrialSummary {
+  profile: TerrainProfile;
+  result: TrialResult;
+  progressPercent: number; // 0–100
+}
+
+export interface EvaluatedIndividual {
+  genome: Genome;
+  score: number; // 0–100 pkt for triple, or meters for single
+  averageSpeed: number;
+  trackResults: readonly TrackTrialSummary[];
+}
+
 export interface BestRecord {
   generation: number;
   result: TrialResult;
+  score?: number;
+  trackResults?: readonly TrackTrialSummary[];
 }
 
 export function createManifest(config: RunConfig): RunManifest {
+  const trainingMode = config.trainingMode ?? "single";
+  const trackProfiles =
+    trainingMode === "triple" ? TRIPLE_TRACK_PROFILES : [config.terrainProfile];
+
   return {
     schemaVersion: 1,
     buildId: APP_BUILD_ID,
@@ -185,10 +216,18 @@ export function createManifest(config: RunConfig): RunManifest {
     rng: "mulberry32-fnv1a@1",
     world: "terrain-profiles@1",
     evolution: "rank-uniform-triangular@3",
+    scoringVersion:
+      trainingMode === "triple"
+        ? "multi-track-harmonic-progress@1"
+        : undefined,
+    trackProfiles,
     fixedDeltaSeconds: FIXED_DELTA_SECONDS,
     maxTrialSteps: MAX_TRIAL_STEPS,
     stagnationSteps: STAGNATION_STEPS,
     traceEverySteps: TRACE_EVERY_STEPS,
-    config: { ...config }
+    config: {
+      ...config,
+      trainingMode
+    }
   };
 }

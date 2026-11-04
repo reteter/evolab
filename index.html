@@ -44,6 +44,15 @@
             <fieldset id="config-fields">
               <legend class="sr-only">Konfiguracja przebiegu</legend>
 
+              <label class="field" for="training-mode">
+                <span>Tryb treningu</span>
+                <span class="field-hint">jedna trasa lub sprawdzian uniwersalności</span>
+                <select id="training-mode" name="trainingMode">
+                  <option value="single">Jedna trasa</option>
+                  <option value="triple">Trzy trasy</option>
+                </select>
+              </label>
+
               <label class="field field-seed" for="seed">
                 <span>Seed</span>
                 <span class="field-hint">ten sam seed — ten sam świat</span>
@@ -73,9 +82,9 @@
                 </select>
               </label>
 
-              <label class="field" for="terrain-profile">
+              <label class="field" for="terrain-profile" id="terrain-profile-field">
                 <span>Profil terenu</span>
-                <span class="field-hint">charakter trasy dla wszystkich pokoleń</span>
+                <span class="field-hint" id="terrain-profile-hint">charakter trasy dla wszystkich pokoleń</span>
                 <select id="terrain-profile" name="terrainProfile">
                   <option value="smooth">Łagodny</option>
                   <option value="steep-hills">Strome wzgórza</option>
@@ -249,9 +258,16 @@
               </button>
             </div>
 
-            <button class="button button-control" id="replay-best" type="button" disabled>
-              Replay rekordu
-            </button>
+            <div class="replay-controls" style="display: inline-flex; align-items: center; gap: 8px;">
+              <select id="replay-track-select" class="button button-control" style="padding: 6px 10px;" aria-label="Wybór trasy replayu" hidden>
+                <option value="smooth">Łagodny</option>
+                <option value="steep-hills">Strome wzgórza</option>
+                <option value="bumpy">Wyboisty</option>
+              </select>
+              <button class="button button-control" id="replay-best" type="button" disabled>
+                Replay rekordu
+              </button>
+            </div>
             <button class="button button-danger" id="stop-run" type="button" disabled>
               Stop
             </button>
@@ -290,6 +306,7 @@
               <dt>Rekord przebiegu</dt>
               <dd id="overall-best-value">0,0 m</dd>
               <span id="record-genome">czeka na pojazd</span>
+              <div id="record-track-details" style="display: flex; flex-direction: column; gap: 2px; font-size: 0.75rem; margin-top: 4px;" hidden></div>
             </div>
             <div class="metric">
               <dt>Najlepszy teraz</dt>

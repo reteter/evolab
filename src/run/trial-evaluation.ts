@@ -1,5 +1,6 @@
 import {
   FIXED_DELTA_SECONDS,
+  FINISH_LINE_OFFSET_X,
   MAX_TRIAL_STEPS,
   STAGNATION_STEPS,
   TRACE_EVERY_STEPS,
@@ -115,7 +116,7 @@ export class TrialEvaluation {
     if (this.latest.chassis.y < -9) {
       return "fell";
     }
-    if (this.latest.chassis.x >= this.terrain.endX - 8) {
+    if (this.latest.chassis.x >= this.terrain.endX - FINISH_LINE_OFFSET_X) {
       return "finished";
     }
     if (

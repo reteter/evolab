@@ -1,5 +1,5 @@
 import { createRng, deriveSeed, randomBetween } from "./rng";
-import type { Point, Terrain, TerrainProfile } from "./types";
+import { FINISH_LINE_OFFSET_X, type Point, type Terrain, type TerrainProfile } from "./types";
 
 const START_X = -20;
 const TOTAL_SPAN = 876; // (220 - 1) * 4 = 876; endX = 856
@@ -44,6 +44,10 @@ const PROFILE_CONFIGS: Record<TerrainProfile, ProfileConfig> = {
     detailAmpMult: 1.4
   }
 };
+
+export function getTrackFinishDistance(terrain: Terrain, startX = 0): number {
+  return Math.max(1, terrain.endX - FINISH_LINE_OFFSET_X - startX);
+}
 
 export function createTerrain(
   seed: string,

@@ -1,7 +1,9 @@
-import { rankResults } from "../domain/evolution";
+import { rankEvaluatedIndividuals, rankResults } from "../domain/evolution";
 import type {
   BestRecord,
+  EvaluatedIndividual,
   GenerationSummary,
+  TrackTrialSummary,
   TrialResult
 } from "../domain/types";
 
@@ -20,6 +22,53 @@ export class RunLog {
     this.bestRecord = {
       generation,
       result: cloneTrialResult(result)
+    };
+    return true;
+  }
+
+  considerMultiTrackIndividual(generation: number, individual: EvaluatedIndividual): boolean {
+    if (this.bestRecord !== null) {
+      const currentScore = this.bestRecord.score ?? 0;
+      if (individual.score < currentScore - 1e-9) {
+        return false;
+      }
+      if (Math.abs(individual.score - currentScore) <= 1e-9) {
+        // Compare averageSpeed then genome.id
+        const currentSpeed =
+          this.bestRecord.trackResults?.reduce((sum, t) => sum + t.result.averageSpeed, 0) ?? 0;
+        const currentAvgSpeed = currentSpeed / (this.bestRecord.trackResults?.length || 1);
+        if (individual.averageSpeed < currentAvgSpeed - 1e-9) {
+          return false;
+        }
+        if (
+          Math.abs(individual.averageSpeed - currentAvgSpeed) <= 1e-9 &&
+          individual.genome.id.localeCompare(this.bestRecord.result.genome.id) >= 0
+        ) {
+          return false;
+        }
+      }
+    }
+
+    const firstSummary = individual.trackResults[0] ?? {
+      result: {
+        genome: individual.genome,
+        maxDistance: 0,
+        averageSpeed: individual.averageSpeed,
+        ticks: 0,
+        reason: "finished",
+        trace: []
+      }
+    };
+
+    this.bestRecord = {
+      generation,
+      result: cloneTrialResult(firstSummary.result),
+      score: individual.score,
+      trackResults: individual.trackResults.map((t) => ({
+        profile: t.profile,
+        progressPercent: t.progressPercent,
+        result: cloneTrialResult(t.result)
+      }))
     };
     return true;
   }
@@ -54,7 +103,13 @@ export class RunLog {
     this.samplingStride = samplingStride;
     this.bestRecord = bestRecord !== null ? {
       generation: bestRecord.generation,
-      result: cloneTrialResult(bestRecord.result)
+      result: cloneTrialResult(bestRecord.result),
+      score: bestRecord.score,
+      trackResults: bestRecord.trackResults?.map((t) => ({
+        profile: t.profile,
+        progressPercent: t.progressPercent,
+        result: cloneTrialResult(t.result)
+      }))
     } : null;
   }
 }

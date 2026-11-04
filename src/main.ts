@@ -5,7 +5,14 @@ import {
   getWheelSlotGeneRanges,
   validateRunConfig
 } from "./domain/evolution";
-import type { Genome, RunConfig, RunMode, TerrainProfile, WheelCountMode } from "./domain/types";
+import type {
+  Genome,
+  RunConfig,
+  RunMode,
+  TerrainProfile,
+  TrainingMode,
+  WheelCountMode
+} from "./domain/types";
 import { CanvasRenderer } from "./presentation/canvas-renderer";
 import { ReplayPlayer } from "./presentation/replay-player";
 import { TrendChart } from "./presentation/trend-chart";
@@ -21,9 +28,11 @@ import { exportRunToJson, importRunFromJson } from "./storage/export-import";
 
 const form = required<HTMLFormElement>("#run-form");
 const configFields = required<HTMLFieldSetElement>("#config-fields");
+const trainingModeSelect = required<HTMLSelectElement>("#training-mode");
 const seedInput = required<HTMLInputElement>("#seed");
 const wheelCountModeSelect = required<HTMLSelectElement>("#wheel-count-mode");
 const terrainProfileSelect = required<HTMLSelectElement>("#terrain-profile");
+const terrainProfileHint = required<HTMLElement>("#terrain-profile-hint");
 const difficultyInput = required<HTMLInputElement>("#difficulty");
 const difficultyOutput = required<HTMLOutputElement>("#difficulty-output");
 const populationInput = required<HTMLInputElement>("#population");
@@ -39,6 +48,7 @@ const startButton = required<HTMLButtonElement>("#start-run");
 const randomSeedButton = required<HTMLButtonElement>("#random-seed");
 const pauseButton = required<HTMLButtonElement>("#pause-run");
 const replayButton = required<HTMLButtonElement>("#replay-best");
+const replayTrackSelect = required<HTMLSelectElement>("#replay-track-select");
 const stopButton = required<HTMLButtonElement>("#stop-run");
 const modeButtons = Array.from(
   document.querySelectorAll<HTMLButtonElement>("[data-mode]")
@@ -58,6 +68,7 @@ const generationAverageValue = required<HTMLElement>(
   "#generation-average-value"
 );
 const recordGenome = required<HTMLElement>("#record-genome");
+const recordTrackDetails = required<HTMLElement>("#record-track-details");
 const headlessOverlay = required<HTMLElement>("#headless-overlay");
 const runSummary = required<HTMLElement>("#run-summary");
 const summaryResult = required<HTMLElement>("#summary-result");
@@ -98,6 +109,7 @@ let headlessWasVisible = false;
 let inspectedGenome: Genome | null = null;
 let savedRunsCache: SavedRun[] = [];
 let selectedRunIdsForComparison = new Set<string>();
+let rememberedSingleProfile: TerrainProfile = "smooth";
 let activeRunName: string | null = null;
 const deletedRunIds = new Set<string>();
 
@@ -221,6 +233,23 @@ populationInput.addEventListener("input", () => {
   }
 });
 
+trainingModeSelect.addEventListener("change", handleTrainingModeChange);
+
+function handleTrainingModeChange(): void {
+  const isTriple = trainingModeSelect.value === "triple";
+  if (isTriple) {
+    if (terrainProfileSelect.value) {
+      rememberedSingleProfile = terrainProfileSelect.value as TerrainProfile;
+    }
+    terrainProfileSelect.disabled = true;
+    terrainProfileHint.textContent = "Stały zestaw: Łagodny, Strome wzgórza, Wyboisty";
+  } else {
+    terrainProfileSelect.disabled = false;
+    terrainProfileSelect.value = rememberedSingleProfile;
+    terrainProfileHint.textContent = "charakter trasy dla wszystkich pokoleń";
+  }
+}
+
 for (const input of [mutationRateInput, mutationStrengthInput, difficultyInput]) {
   input.addEventListener("input", updateRangeOutputs);
 }
@@ -338,10 +367,10 @@ function renderSavedRunsGrid(): void {
     const isMatch =
       !firstSelectedRun ||
       (firstSelectedRun.checkpoint.config.seed === run.checkpoint.config.seed &&
-        firstSelectedRun.checkpoint.config.terrainProfile ===
-          run.checkpoint.config.terrainProfile &&
-        firstSelectedRun.checkpoint.config.difficulty ===
-          run.checkpoint.config.difficulty);
+        firstSelectedRun.checkpoint.config.difficulty === run.checkpoint.config.difficulty &&
+        (firstSelectedRun.checkpoint.config.trainingMode ?? "single") === (run.checkpoint.config.trainingMode ?? "single") &&
+        ((firstSelectedRun.checkpoint.config.trainingMode ?? "single") === "triple" ||
+          firstSelectedRun.checkpoint.config.terrainProfile === run.checkpoint.config.terrainProfile));
 
     const maxReached =
       selectedRunIdsForComparison.size >= 3 &&
@@ -389,17 +418,24 @@ function renderSavedRunsGrid(): void {
       "2-4": "2–4 koła"
     };
 
+    const isRunTriple = (run.checkpoint.config.trainingMode ?? "single") === "triple";
+
+    const recordDisplay = run.checkpoint.bestRecord
+      ? isRunTriple
+        ? `${formatPoints(run.checkpoint.bestRecord.score ?? 0)} (G${run.checkpoint.bestRecord.generation})`
+        : `${formatDistance(run.checkpoint.bestRecord.result.maxDistance)} (G${run.checkpoint.bestRecord.generation})`
+      : "—";
+
     const metaItems: [string, string][] = [
+      ["Tryb treningu", isRunTriple ? "Trzy trasy" : "Jedna trasa"],
       ["Seed", run.checkpoint.config.seed],
       ["Liczba kół", wheelModeLabels[run.checkpoint.config.wheelCountMode ?? "2"]],
-      ["Profil terenu", profileLabels[run.checkpoint.config.terrainProfile]],
+      ["Profil terenu", isRunTriple ? "Łagodny, Wzgórza, Wyboisty" : profileLabels[run.checkpoint.config.terrainProfile]],
       ["Trudność", `${run.checkpoint.config.difficulty}/5`],
       ["Ukończone pokolenia", String(run.checkpoint.completedGenerations)],
       [
         "Rekord",
-        run.checkpoint.bestRecord
-          ? `${formatDistance(run.checkpoint.bestRecord.result.maxDistance)} (G${run.checkpoint.bestRecord.generation})`
-          : "—"
+        recordDisplay
       ],
       ["Data zapisu", new Date(run.updatedAt).toLocaleTimeString("pl-PL")]
     ];
@@ -512,8 +548,10 @@ async function resumeRun(run: SavedRun): Promise<void> {
 }
 
 function populateFormConfig(config: RunConfig): void {
+  trainingModeSelect.value = config.trainingMode ?? "single";
   seedInput.value = config.seed;
   wheelCountModeSelect.value = config.wheelCountMode ?? "2-4";
+  rememberedSingleProfile = config.terrainProfile;
   terrainProfileSelect.value = config.terrainProfile;
   difficultyInput.value = String(config.difficulty);
   populationInput.value = String(config.populationSize);
@@ -521,6 +559,7 @@ function populateFormConfig(config: RunConfig): void {
   elitesInput.value = String(config.eliteCount);
   mutationRateInput.value = String(Math.round(config.mutationRate * 100));
   mutationStrengthInput.value = String(Math.round(config.mutationStrength * 100));
+  handleTrainingModeChange();
   updateRangeOutputs();
 }
 
@@ -598,6 +637,12 @@ function updateInterface(state: RunViewState): void {
     button.setAttribute("aria-pressed", String(isActive));
   }
 
+  const isTriple = (state.manifest?.config.trainingMode ?? "single") === "triple";
+
+  // Replay track select visibility and enablement
+  replayTrackSelect.hidden = !isTriple;
+  replayTrackSelect.disabled = active || state.bestRecord === null;
+
   candidateId.textContent =
     state.status === "replay"
       ? `Replay · ${state.bestRecord?.result.genome.id ?? "rekord"}`
@@ -606,7 +651,9 @@ function updateInterface(state: RunViewState): void {
     state.status === "replay"
       ? `Pokolenie ${state.bestRecord?.generation} · replay`
       : state.populationSize > 0
-      ? `${state.candidateIndex} / ${state.populationSize} ocenionych · ${state.activeTrials.length} na trasie`
+      ? isTriple
+        ? `Trasa ${state.currentTrackIndex ?? 1}/3 (${profileLabelPl(state.currentTrackProfile ?? "smooth")}) · ${state.candidateIndex} / ${state.populationSize} ocenionych`
+        : `${state.candidateIndex} / ${state.populationSize} ocenionych · ${state.activeTrials.length} na trasie`
       : "— / —";
   currentDistance.textContent = formatDistance(state.currentDistance);
   distanceLabel.textContent = state.status === "replay" ? "Dystans replay" : "Dystans lidera";
@@ -615,13 +662,39 @@ function updateInterface(state: RunViewState): void {
     state.populationSize > 0
       ? `${state.remainingTrials} prób pozostało`
       : "brak przebiegu";
-  overallBestValue.textContent = formatDistance(state.overallBest);
-  generationBestValue.textContent = formatDistance(state.generationBest);
-  generationAverageValue.textContent = formatDistance(state.generationAverage);
+
+  if (isTriple) {
+    chart.setUnit("points");
+    overallBestValue.textContent = state.bestRecord ? formatPoints(state.overallBest) : "—";
+    generationBestValue.textContent = state.completedGenerations > 0 && state.generationBest > 0 ? formatPoints(state.generationBest) : "—";
+    generationAverageValue.textContent = state.completedGenerations > 0 && state.generationAverage > 0 ? formatPoints(state.generationAverage) : "—";
+  } else {
+    chart.setUnit("meters");
+    overallBestValue.textContent = formatDistance(state.overallBest);
+    generationBestValue.textContent = formatDistance(state.generationBest);
+    generationAverageValue.textContent = formatDistance(state.generationAverage);
+  }
+
   recordGenome.textContent =
     state.bestRecord === null
       ? "czeka na pojazd"
       : `${state.bestRecord.result.genome.id} · G${state.bestRecord.generation}`;
+
+  // Multi-track details under record
+  if (isTriple && state.bestRecord?.trackResults && state.bestRecord.trackResults.length === 3) {
+    recordTrackDetails.hidden = false;
+    recordTrackDetails.replaceChildren(
+      ...state.bestRecord.trackResults.map((t) => {
+        const item = document.createElement("span");
+        item.style.color = "var(--text-muted, #7e9a9c)";
+        item.textContent = `${profileLabelPl(t.profile)}: ${formatDistance(t.result.maxDistance)} · ${t.progressPercent.toFixed(1).replace(".", ",")}%`;
+        return item;
+      })
+    );
+  } else {
+    recordTrackDetails.hidden = true;
+    recordTrackDetails.replaceChildren();
+  }
   showGenome(state.status === "replay" ? state.bestRecord?.result.genome ?? null : state.currentGenome);
 
   const headlessVisible = state.mode === "headless" && state.status === "running";
@@ -667,6 +740,7 @@ function updateInterface(state: RunViewState): void {
   const showSummary = state.status === "stopped" && state.manifest !== null;
   runSummary.hidden = !showSummary;
   if (showSummary) {
+    const isSumTriple = (state.manifest?.config.trainingMode ?? "single") === "triple";
     const profileLabels: Record<TerrainProfile, string> = {
       smooth: "łagodny",
       "steep-hills": "strome wzgórza",
@@ -674,8 +748,11 @@ function updateInterface(state: RunViewState): void {
     };
     const prof = state.manifest?.config.terrainProfile ?? "smooth";
     const diff = state.manifest?.config.difficulty ?? 3;
-    summaryResult.textContent = `${formatDistance(state.overallBest)} · ${state.completedGenerations} pokoleń`;
-    summaryDetail.textContent = `seed ${state.manifest?.config.seed ?? "—"} · ${profileLabels[prof]} (trudność ${diff}/5)`;
+    const scoreOrDist = isSumTriple ? formatPoints(state.overallBest) : formatDistance(state.overallBest);
+    summaryResult.textContent = `${scoreOrDist} · ${state.completedGenerations} pokoleń`;
+    summaryDetail.textContent = isSumTriple
+      ? `seed ${state.manifest?.config.seed ?? "—"} · 3 trasy (trudność ${diff}/5)`
+      : `seed ${state.manifest?.config.seed ?? "—"} · ${profileLabels[prof]} (trudność ${diff}/5)`;
   }
 }
 
@@ -730,18 +807,22 @@ function toggleReplay(): void {
     return;
   }
 
-  const best = controller.enterReplay();
-  const terrain = currentState.terrain;
-  if (best === null || terrain === null) {
+  const selectedProfile = replayTrackSelect.value as TerrainProfile;
+  const replayData = controller.enterReplay(selectedProfile);
+  if (replayData === null) {
     return;
   }
 
+  const { bestRecord, trackSummary, terrain } = replayData;
+  const trace = trackSummary ? trackSummary.result.trace : bestRecord.result.trace;
+  const genome = trackSummary ? trackSummary.result.genome : bestRecord.result.genome;
+
   replay.play(
-    best.result.trace,
+    trace,
     (frame) => {
       renderer.render({
         terrain,
-        genome: best.result.genome,
+        genome,
         snapshot: frame,
         replay: true
       });
@@ -753,12 +834,13 @@ function toggleReplay(): void {
 
 function readConfig(): RunConfig {
   return {
+    trainingMode: trainingModeSelect.value as TrainingMode,
     seed: seedInput.value.trim(),
     populationSize: Number(populationInput.value),
     mutationRate: Number(mutationRateInput.value) / 100,
     mutationStrength: Number(mutationStrengthInput.value) / 100,
     eliteCount: Number(elitesInput.value),
-    terrainProfile: terrainProfileSelect.value as TerrainProfile,
+    terrainProfile: (trainingModeSelect.value === "triple" ? rememberedSingleProfile : terrainProfileSelect.value) as TerrainProfile,
     difficulty: Number(difficultyInput.value),
     wheelCountMode: wheelCountModeSelect.value as WheelCountMode
   };
@@ -792,6 +874,24 @@ function formatDistance(value: number): string {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1
   })} m`;
+}
+
+function formatPoints(value: number): string {
+  return `${value.toLocaleString("pl-PL", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  })} pkt`;
+}
+
+function profileLabelPl(profile: TerrainProfile): string {
+  switch (profile) {
+    case "smooth":
+      return "Łagodny";
+    case "steep-hills":
+      return "Strome wzgórza";
+    case "bumpy":
+      return "Wyboisty";
+  }
 }
 
 function isRunMode(value: string | undefined): value is RunMode {
