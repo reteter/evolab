@@ -44,42 +44,47 @@ Najważniejsze rozróżnienia:
 
 ## 4. Genom i fenotyp
 
-### Kandydat v0
+### Implementacja v0.2 — 2026-11-04
 
 Stała topologia:
 
 - korpus z zamkniętego wielokąta wokół środka;
 - dokładnie dwa koła;
-- każde koło przypięte do jednego wierzchołka;
-- stały napęd i materiały.
+- każde koło ma osobne sprężynowane zawieszenie na osi pionowej korpusu;
+- napęd, materiały i rozkład masy podlegają ewolucji.
 
-Minimalne grupy genów:
+Genom obejmuje 28 genów ciągłych:
 
 | Grupa | Wpływ |
 |---|---|
-| promienie lub pozycje wierzchołków korpusu | kształt pojazdu |
-| indeks wierzchołka koła 1 | miejsce pierwszego koła |
-| indeks wierzchołka koła 2 | miejsce drugiego koła |
-| promień koła 1 | rozmiar pierwszego koła |
-| promień koła 2 | rozmiar drugiego koła |
+| 7 cech korpusu | szerokość, wysokość, dach, przód, tył, nachylenie i przesunięcie dachu |
+| 4 cechy geometrii kół | rozstaw oraz promień każdego koła |
+| 4 cechy napędu | obroty, moment, podział momentu między osiami i względne obroty przodu |
+| 5 cech materiałów | gęstość korpusu oraz gęstość i przyczepność każdego koła |
+| 6 cech zawieszenia | prześwit, częstotliwość sprężyny i tłumienie osobno dla obu kół |
+| 2 cechy balastu | masa i położenie dodatkowego obciążenia |
 
-Roboczym kandydatem jest osiem wierzchołków korpusu. Dokładna liczba pozostaje kalibracją T0.
+Korpus ma osiem wierzchołków. Zakresy wszystkich cech znajdują się w
+`src/domain/evolution.ts`; inspektor w aplikacji pokazuje wartości lidera lub
+pojazdu odtwarzanego w replayu.
+
+Kontroler ocenia cztery pojazdy jednocześnie w osobnych światach Planck.
+Po zakończeniu próby wolne miejsce zajmuje następny pojazd. Nowe pokolenie
+powstaje dopiero po ocenie całej populacji. Symulacje są przeplatane na głównym
+wątku, z tym samym stałym krokiem fizyki; pojazdy nie zderzają się ze sobą.
 
 ### Ograniczenia poprawności
 
-- koła zajmują różne dozwolone wierzchołki;
+- punkty mocowania kół znajdują się po przeciwnych stronach korpusu;
 - korpus jest prosty i ma minimalne pole;
 - promienie pozostają w bezpiecznym zakresie;
 - pojazd nie zaczyna z trwałą kolizją własną;
 - mapowanie nie wykonuje losowej naprawy.
 
-Jeżeli operator tworzy niedozwoloną parę indeksów kół, używa jawnej, deterministycznej polityki normalizacji albo reprezentacji, która wyklucza taki stan.
-
 ### Poza v0
 
 - zmienna liczba wierzchołków;
 - zmienna liczba kół;
-- geny materiałów, gęstości, tarcia i mocy;
 - ręczny edytor.
 
 ## 5. Populacja początkowa

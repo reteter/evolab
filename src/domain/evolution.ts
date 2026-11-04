@@ -10,23 +10,40 @@ import type {
 
 interface GeneRange {
   key: VehicleGeneKey;
+  label: string;
   minimum: number;
   maximum: number;
 }
 
-const GENE_RANGES: readonly GeneRange[] = [
-  { key: "width", minimum: 1.25, maximum: 2.2 },
-  { key: "height", minimum: 0.68, maximum: 1.18 },
-  { key: "roofScale", minimum: 0.76, maximum: 1.05 },
-  { key: "noseScale", minimum: 0.9, maximum: 1.08 },
-  { key: "tailScale", minimum: 0.9, maximum: 1.08 },
-  { key: "floorTilt", minimum: -0.08, maximum: 0.08 },
-  { key: "rearInset", minimum: 0.48, maximum: 0.78 },
-  { key: "frontInset", minimum: 0.48, maximum: 0.78 },
-  { key: "rearWheelRadius", minimum: 0.34, maximum: 0.78 },
-  { key: "frontWheelRadius", minimum: 0.34, maximum: 0.78 },
-  { key: "motorSpeed", minimum: 8, maximum: 17 },
-  { key: "motorTorque", minimum: 28, maximum: 76 }
+export const GENE_RANGES: readonly GeneRange[] = [
+  { key: "width", label: "Szerokość korpusu", minimum: 1.05, maximum: 2.6 },
+  { key: "height", label: "Wysokość korpusu", minimum: 0.55, maximum: 1.45 },
+  { key: "roofScale", label: "Szerokość dachu", minimum: 0.6, maximum: 1.1 },
+  { key: "noseScale", label: "Długość przodu", minimum: 0.9, maximum: 1.08 },
+  { key: "tailScale", label: "Długość tyłu", minimum: 0.9, maximum: 1.08 },
+  { key: "floorTilt", label: "Nachylenie podwozia", minimum: -0.08, maximum: 0.08 },
+  { key: "rearInset", label: "Rozstaw tylnego koła", minimum: 0.48, maximum: 0.88 },
+  { key: "frontInset", label: "Rozstaw przedniego koła", minimum: 0.48, maximum: 0.88 },
+  { key: "rearWheelRadius", label: "Promień tylnego koła", minimum: 0.28, maximum: 1 },
+  { key: "frontWheelRadius", label: "Promień przedniego koła", minimum: 0.28, maximum: 1 },
+  { key: "motorSpeed", label: "Obroty napędu", minimum: 8, maximum: 22 },
+  { key: "motorTorque", label: "Moment napędu", minimum: 28, maximum: 100 },
+  { key: "roofOffset", label: "Przesunięcie dachu", minimum: -0.18, maximum: 0.18 },
+  { key: "chassisDensity", label: "Gęstość korpusu", minimum: 0.45, maximum: 1.6 },
+  { key: "rearWheelDensity", label: "Gęstość tylnego koła", minimum: 0.55, maximum: 1.6 },
+  { key: "frontWheelDensity", label: "Gęstość przedniego koła", minimum: 0.55, maximum: 1.6 },
+  { key: "rearWheelGrip", label: "Przyczepność tyłu", minimum: 0.5, maximum: 2 },
+  { key: "frontWheelGrip", label: "Przyczepność przodu", minimum: 0.5, maximum: 2 },
+  { key: "rearRideHeight", label: "Prześwit tyłu", minimum: 0.08, maximum: 0.55 },
+  { key: "frontRideHeight", label: "Prześwit przodu", minimum: 0.08, maximum: 0.55 },
+  { key: "rearSpringFrequency", label: "Sprężyna tyłu (Hz)", minimum: 2.5, maximum: 7 },
+  { key: "frontSpringFrequency", label: "Sprężyna przodu (Hz)", minimum: 2.5, maximum: 7 },
+  { key: "rearSpringDamping", label: "Tłumienie tyłu", minimum: 0.35, maximum: 0.95 },
+  { key: "frontSpringDamping", label: "Tłumienie przodu", minimum: 0.35, maximum: 0.95 },
+  { key: "driveBalance", label: "Udział napędu na przód", minimum: 0, maximum: 1 },
+  { key: "frontSpeedRatio", label: "Względne obroty przodu", minimum: 0.65, maximum: 1.3 },
+  { key: "ballastMass", label: "Masa balastu", minimum: 0, maximum: 2.8 },
+  { key: "ballastOffset", label: "Położenie balastu", minimum: -0.65, maximum: 0.65 }
 ];
 
 export const DEFAULT_RUN_CONFIG: RunConfig = {

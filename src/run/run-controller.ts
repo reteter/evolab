@@ -1,13 +1,13 @@
 import {
   createInitialPopulation,
   createNextPopulation,
-  rankResults,
   summarizeGeneration,
   validateRunConfig
 } from "../domain/evolution";
 import { createTerrain } from "../domain/world";
 import {
   createManifest,
+  CONCURRENT_TRIALS,
   type BestRecord,
   type GenerationSummary,
   type Genome,
@@ -46,9 +46,16 @@ export interface RunViewState {
   overallBest: number;
   currentGenome: Genome | null;
   currentSnapshot: TrialSnapshot | null;
+  activeTrials: readonly LiveTrial[];
   history: readonly GenerationSummary[];
   bestRecord: BestRecord | null;
   message: string;
+}
+
+export interface LiveTrial {
+  genome: Genome;
+  snapshot: TrialSnapshot;
+  distance: number;
 }
 
 export interface RunScheduler {
@@ -116,61 +123,9 @@ export class RunController {
 
     try {
       while (!this.stopRequested && currentToken === this.token) {
-        const results: TrialResult[] = [];
-
-        for (let index = 0; index < population.length; index += 1) {
-          if (this.stopRequested || currentToken !== this.token) {
-            break;
-          }
-
-          const genome = population[index];
-          if (genome === undefined) {
-            throw new Error("Brak pojazdu w populacji.");
-          }
-
-          const evaluation = new TrialEvaluation(
-            this.simulation.createTrial(genome, terrain),
-            genome,
-            terrain
-          );
-          this.state = {
-            ...this.state,
-            generation,
-            candidateIndex: index + 1,
-            remainingTrials: population.length - index,
-            currentGenome: genome,
-            currentSnapshot: evaluation.snapshot(),
-            currentDistance: 0,
-            message: `${genome.id} na trasie`
-          };
-          this.emit();
-
-          try {
-            await this.runTrial(evaluation, currentToken);
-          } finally {
-            evaluation.dispose();
-          }
-
-          if (!evaluation.done || this.stopRequested || currentToken !== this.token) {
-            break;
-          }
-
-          const result = evaluation.result();
-          results.push(result);
-          log.considerResult(generation, result);
-          const partial = summarizeGeneration(generation, results);
-          this.state = {
-            ...this.state,
-            remainingTrials: population.length - index - 1,
-            currentDistance: result.maxDistance,
-            generationBest: partial.bestDistance,
-            generationAverage: partial.averageDistance,
-            overallBest: log.getBestRecord()?.result.maxDistance ?? 0,
-            bestRecord: log.getBestRecord(),
-            message: `${result.genome.id}: ${formatDistance(result.maxDistance)}`
-          };
-          this.emit();
-        }
+        const results = await this.evaluatePopulation(
+          population, terrain, generation, log, currentToken
+        );
 
         if (results.length !== population.length) {
           break;
@@ -201,6 +156,9 @@ export class RunController {
           generationBest: 0,
           generationAverage: 0,
           currentDistance: 0,
+          currentGenome: null,
+          currentSnapshot: null,
+          activeTrials: [],
           message: `Pokolenie ${generation}`
         };
         this.emit();
@@ -258,6 +216,7 @@ export class RunController {
       ...this.state,
       status: "stopped",
       remainingTrials: 0,
+      activeTrials: [],
       message: "Przebieg zatrzymany"
     };
     this.emit();
@@ -321,57 +280,110 @@ export class RunController {
     this.emit();
   }
 
-  private async runTrial(
-    evaluation: TrialEvaluation,
+  private async evaluatePopulation(
+    population: Genome[],
+    terrain: Terrain,
+    generation: number,
+    log: RunLog,
     currentToken: number
-  ): Promise<void> {
+  ): Promise<TrialResult[]> {
+    const results: TrialResult[] = [];
+    const active: { genome: Genome; evaluation: TrialEvaluation }[] = [];
+    let nextIndex = 0;
+    let lastFinished: TrialResult | null = null;
     let lastHeadlessEmit = this.scheduler.now();
 
-    while (!evaluation.done && !this.stopRequested && currentToken === this.token) {
-      if (this.paused || this.state.status === "replay") {
-        await this.scheduler.nextFrame();
-        continue;
+    const fillSlots = () => {
+      while (active.length < CONCURRENT_TRIALS && nextIndex < population.length) {
+        const genome = population[nextIndex++]!;
+        active.push({
+          genome,
+          evaluation: new TrialEvaluation(
+            this.simulation.createTrial(genome, terrain), genome, terrain
+          )
+        });
       }
+    };
 
-      const mode = this.state.mode;
-      if (mode === "normal") {
-        evaluation.advance();
-      } else if (mode === "fast") {
-        for (let step = 0; step < 10 && !evaluation.done; step += 1) {
-          evaluation.advance();
+    const publish = () => {
+      const trials = active.map(({ genome, evaluation }) => ({
+        genome,
+        snapshot: evaluation.snapshot(),
+        distance: evaluation.distance
+      }));
+      const leader = trials.reduce<LiveTrial | null>(
+        (best, trial) => best === null || trial.distance > best.distance ? trial : best,
+        null
+      );
+      const partial = summarizeGeneration(generation, results);
+      this.state = {
+        ...this.state,
+        generation,
+        candidateIndex: results.length,
+        remainingTrials: population.length - results.length,
+        activeTrials: trials,
+        currentGenome: leader?.genome ?? lastFinished?.genome ?? null,
+        currentSnapshot: leader?.snapshot ?? lastFinished?.trace.at(-1) ?? null,
+        currentDistance: leader?.distance ?? lastFinished?.maxDistance ?? 0,
+        generationBest: partial.bestDistance,
+        generationAverage: partial.averageDistance,
+        overallBest: log.getBestRecord()?.result.maxDistance ?? 0,
+        bestRecord: log.getBestRecord(),
+        message: `${trials.length} na trasie · ${results.length}/${population.length} ocenionych`
+      };
+      this.emit();
+      lastHeadlessEmit = this.scheduler.now();
+    };
+
+    try {
+      fillSlots();
+      publish();
+      while (results.length < population.length && !this.stopRequested && currentToken === this.token) {
+        if (this.paused || this.state.status === "replay") {
+          await this.scheduler.nextFrame();
+          continue;
         }
-      } else {
+
+        const mode = this.state.mode;
+        const stepCount = mode === "normal" ? 1 : mode === "fast" ? 10 : 4_096;
         const startedAt = this.scheduler.now();
-        for (let step = 0; step < 4_096 && !evaluation.done; step += 1) {
-          evaluation.advance();
-          if (this.scheduler.now() - startedAt >= 8) {
+        let finished = false;
+        for (let step = 0; step < stepCount; step += 1) {
+          for (let index = active.length - 1; index >= 0; index -= 1) {
+            const trial = active[index]!;
+            trial.evaluation.advance();
+            if (trial.evaluation.done) {
+              const result = trial.evaluation.result();
+              results.push(result);
+              log.considerResult(generation, result);
+              lastFinished = result;
+              active.splice(index, 1);
+              finished = true;
+            }
+          }
+          fillSlots();
+          if (active.length === 0 || (mode === "headless" && this.scheduler.now() - startedAt >= 8)) {
             break;
           }
         }
-      }
 
-      const shouldEmit =
-        mode !== "headless" ||
-        evaluation.done ||
-        this.scheduler.now() - lastHeadlessEmit >= 40;
-      if (shouldEmit) {
-        this.state = {
-          ...this.state,
-          currentSnapshot: evaluation.snapshot(),
-          currentDistance: evaluation.distance
-        };
-        this.emit();
-        lastHeadlessEmit = this.scheduler.now();
-      }
-
-      if (!evaluation.done) {
-        if (mode === "headless") {
-          await this.scheduler.nextTask();
-        } else {
-          await this.scheduler.nextFrame();
+        if (mode !== "headless" || finished || this.scheduler.now() - lastHeadlessEmit >= 40) {
+          publish();
+        }
+        if (active.length > 0) {
+          if (mode === "headless") {
+            await this.scheduler.nextTask();
+          } else {
+            await this.scheduler.nextFrame();
+          }
         }
       }
+    } finally {
+      for (const trial of active) {
+        trial.evaluation.dispose();
+      }
     }
+    return results;
   }
 
   private emit(): void {
@@ -410,12 +422,9 @@ function initialState(): RunViewState {
     overallBest: 0,
     currentGenome: null,
     currentSnapshot: null,
+    activeTrials: [],
     history: [],
     bestRecord: null,
     message: "Gotowy do nowego przebiegu"
   };
-}
-
-function formatDistance(value: number): string {
-  return `${value.toFixed(1)} m`;
 }

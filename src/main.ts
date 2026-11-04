@@ -1,9 +1,10 @@
 import "./styles.css";
 import {
   DEFAULT_RUN_CONFIG,
+  GENE_RANGES,
   validateRunConfig
 } from "./domain/evolution";
-import type { RunConfig, RunMode } from "./domain/types";
+import type { Genome, RunConfig, RunMode } from "./domain/types";
 import { CanvasRenderer } from "./presentation/canvas-renderer";
 import { ReplayPlayer } from "./presentation/replay-player";
 import { TrendChart } from "./presentation/trend-chart";
@@ -36,6 +37,7 @@ const runMessage = required<HTMLElement>("#run-message");
 const candidateId = required<HTMLElement>("#candidate-id");
 const candidateProgress = required<HTMLElement>("#candidate-progress");
 const currentDistance = required<HTMLElement>("#current-distance");
+const distanceLabel = required<HTMLElement>("#distance-label");
 const generationValue = required<HTMLElement>("#generation-value");
 const remainingValue = required<HTMLElement>("#remaining-value");
 const overallBestValue = required<HTMLElement>("#overall-best-value");
@@ -49,6 +51,7 @@ const runSummary = required<HTMLElement>("#run-summary");
 const summaryResult = required<HTMLElement>("#summary-result");
 const summaryDetail = required<HTMLElement>("#summary-detail");
 const canvas = required<HTMLCanvasElement>("#simulation-canvas");
+const genomeValues = required<HTMLElement>("#genome-values");
 
 const renderer = new CanvasRenderer(canvas);
 const chart = new TrendChart(
@@ -62,6 +65,7 @@ const controller = new RunController(new PlanckSimulationAdapter());
 let currentState = controller.getState();
 let renderedHistorySignature = "";
 let headlessWasVisible = false;
+let inspectedGenome: Genome | null = null;
 
 const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
 renderer.setReducedMotion(motionPreference.matches);
@@ -182,12 +186,15 @@ function updateInterface(state: RunViewState): void {
   candidateId.textContent =
     state.status === "replay"
       ? `Replay · ${state.bestRecord?.result.genome.id ?? "rekord"}`
-      : state.currentGenome?.id ?? "Jeszcze bez pojazdu";
+      : state.currentGenome === null ? "Jeszcze bez pojazdu" : `Lider · ${state.currentGenome.id}`;
   candidateProgress.textContent =
-    state.populationSize > 0
-      ? `${Math.max(1, state.candidateIndex)} / ${state.populationSize}`
+    state.status === "replay"
+      ? `Pokolenie ${state.bestRecord?.generation} · replay`
+      : state.populationSize > 0
+      ? `${state.candidateIndex} / ${state.populationSize} ocenionych · ${state.activeTrials.length} na trasie`
       : "— / —";
   currentDistance.textContent = formatDistance(state.currentDistance);
+  distanceLabel.textContent = state.status === "replay" ? "Dystans replay" : "Dystans lidera";
   generationValue.textContent = state.generation > 0 ? String(state.generation) : "—";
   remainingValue.textContent =
     state.populationSize > 0
@@ -200,6 +207,7 @@ function updateInterface(state: RunViewState): void {
     state.bestRecord === null
       ? "czeka na pojazd"
       : `${state.bestRecord.result.genome.id} · G${state.bestRecord.generation}`;
+  showGenome(state.status === "replay" ? state.bestRecord?.result.genome ?? null : state.currentGenome);
 
   const headlessVisible = state.mode === "headless" && state.status === "running";
   headlessOverlay.hidden = !headlessVisible;
@@ -218,15 +226,19 @@ function updateInterface(state: RunViewState): void {
     renderer.render({
       terrain: state.terrain,
       genome: state.currentGenome,
-      snapshot: state.currentSnapshot
+      snapshot: state.currentSnapshot,
+      vehicles: state.activeTrials,
+      groupKey: `${state.manifest?.config.seed}:${state.generation}`
     });
   }
 
   canvas.setAttribute(
     "aria-label",
-    state.currentGenome === null
+    state.status === "replay"
+      ? `Replay ${state.bestRecord?.result.genome.id}. Wynik próby ${formatDistance(state.overallBest)}.`
+      : state.currentGenome === null
       ? "Pusta trasa. Uruchom przebieg, aby zobaczyć pojazd."
-      : `${statusLabel(state)}. Pojazd ${state.currentGenome.id}, dystans ${formatDistance(
+      : `${statusLabel(state)}. ${state.activeTrials.length} pojazdów na trasie. Lider ${state.currentGenome.id}, dystans ${formatDistance(
           state.currentDistance
         )}, pokolenie ${state.generation}.`
   );
@@ -243,6 +255,22 @@ function updateInterface(state: RunViewState): void {
     summaryResult.textContent = `${formatDistance(state.overallBest)} · ${state.completedGenerations} pokoleń`;
     summaryDetail.textContent = `seed ${state.manifest?.config.seed ?? "—"}`;
   }
+}
+
+function showGenome(genome: Genome | null): void {
+  if (genome === inspectedGenome) {
+    return;
+  }
+  inspectedGenome = genome;
+  genomeValues.replaceChildren(...(genome === null ? [] : GENE_RANGES.map(({ key, label }) => {
+    const row = document.createElement("div");
+    const name = document.createElement("dt");
+    const value = document.createElement("dd");
+    name.textContent = label;
+    value.textContent = genome.genes[key].toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+    row.append(name, value);
+    return row;
+  })));
 }
 
 function togglePause(): void {

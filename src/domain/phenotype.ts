@@ -4,6 +4,10 @@ export interface VehiclePhenotype {
   vertices: Point[];
   rearAnchor: Point;
   frontAnchor: Point;
+  rearWheelCenter: Point;
+  frontWheelCenter: Point;
+  ballastCenter: Point;
+  ballastRadius: number;
   rearWheelRadius: number;
   frontWheelRadius: number;
   motorSpeed: number;
@@ -25,8 +29,8 @@ export function buildPhenotype(genome: Genome): VehiclePhenotype {
       { x: width * 0.58, y: frontFloor },
       { x: width * genes.noseScale, y: -height * 0.04 },
       { x: width * 0.78 * genes.noseScale, y: height * 0.34 },
-      { x: width * 0.42 * genes.roofScale, y: height * 0.7 },
-      { x: -width * 0.44 * genes.roofScale, y: height * 0.7 },
+      { x: width * (0.42 * genes.roofScale + genes.roofOffset), y: height * 0.7 },
+      { x: width * (-0.44 * genes.roofScale + genes.roofOffset), y: height * 0.7 },
       { x: -width * 0.78 * genes.tailScale, y: height * 0.32 }
     ],
     rearAnchor: {
@@ -37,15 +41,21 @@ export function buildPhenotype(genome: Genome): VehiclePhenotype {
       x: width * genes.frontInset,
       y: frontFloor + height * 0.02
     },
+    rearWheelCenter: {
+      x: -width * genes.rearInset,
+      y: rearFloor + height * 0.02 - genes.rearRideHeight
+    },
+    frontWheelCenter: {
+      x: width * genes.frontInset,
+      y: frontFloor + height * 0.02 - genes.frontRideHeight
+    },
+    ballastCenter: { x: width * genes.ballastOffset, y: -height * 0.08 },
+    ballastRadius: 0.1 + genes.ballastMass * 0.035,
     rearWheelRadius: genes.rearWheelRadius,
     frontWheelRadius: genes.frontWheelRadius,
     motorSpeed: genes.motorSpeed,
     motorTorque: genes.motorTorque,
-    hue: Math.round(
-      42 +
-        ((genes.width - 1.25) / 0.95) * 48 +
-        ((genes.frontWheelRadius - 0.34) / 0.44) * 22
-    )
+    hue: Math.round(30 + genes.driveBalance * 280)
   };
 }
 

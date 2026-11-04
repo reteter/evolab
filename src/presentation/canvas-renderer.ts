@@ -11,6 +11,8 @@ interface Scene {
   genome: Genome;
   snapshot: TrialSnapshot;
   replay?: boolean;
+  vehicles?: readonly { genome: Genome; snapshot: TrialSnapshot }[];
+  groupKey?: string;
 }
 
 export class CanvasRenderer {
@@ -23,6 +25,7 @@ export class CanvasRenderer {
   private currentGenomeId = "";
   private reducedMotion = false;
   private lastScene: Scene | null = null;
+  private zoomScale = 58;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext("2d");
@@ -48,16 +51,24 @@ export class CanvasRenderer {
 
   render(scene: Scene): void {
     this.lastScene = scene;
-    const targetX = scene.snapshot.chassis.x;
+    const vehicles = scene.vehicles?.length ? scene.vehicles : [scene];
+    const positions = vehicles.map(({ snapshot }) => snapshot.chassis.x);
+    const left = Math.min(...positions);
+    const right = Math.max(...positions);
+    const targetX = (left + right) / 2;
     const targetY = scene.snapshot.chassis.y - 1.2;
-    if (scene.genome.id !== this.currentGenomeId || scene.replay) {
-      this.currentGenomeId = scene.genome.id;
+    const cameraKey = scene.groupKey ?? scene.genome.id;
+    const targetScale = Math.min(this.baseScale(), this.width / (right - left + 14));
+    if (cameraKey !== this.currentGenomeId || scene.replay) {
+      this.currentGenomeId = cameraKey;
       this.cameraX = targetX;
       this.cameraY = targetY;
+      this.zoomScale = targetScale;
     } else {
       const easing = this.reducedMotion ? 1 : 0.12;
       this.cameraX += (targetX - this.cameraX) * easing;
       this.cameraY += (targetY - this.cameraY) * easing;
+      this.zoomScale += (targetScale - this.zoomScale) * easing;
     }
 
     this.beginFrame();
@@ -65,6 +76,14 @@ export class CanvasRenderer {
     this.drawGrid(scene.terrain);
     this.drawTerrain(scene.terrain);
     this.drawStartMarker(scene.terrain);
+    for (const vehicle of vehicles) {
+      if (vehicle.genome.id !== scene.genome.id) {
+        this.context.save();
+        this.context.globalAlpha = 0.58;
+        this.drawVehicle(vehicle.genome, vehicle.snapshot);
+        this.context.restore();
+      }
+    }
     this.drawVehicle(scene.genome, scene.snapshot);
     this.drawProgressBeam(scene.snapshot.chassis.x);
   }
@@ -73,6 +92,7 @@ export class CanvasRenderer {
     this.lastScene = null;
     this.cameraX = 0;
     this.cameraY = 0;
+    this.zoomScale = this.baseScale();
     this.beginFrame();
     this.drawSky();
     this.drawGrid(null);
@@ -274,6 +294,28 @@ export class CanvasRenderer {
     const phenotype = buildPhenotype(genome);
     const scale = this.scale();
 
+    for (const [index, anchor] of [phenotype.rearAnchor, phenotype.frontAnchor].entries()) {
+      const cosine = Math.cos(snapshot.chassis.angle);
+      const sine = Math.sin(snapshot.chassis.angle);
+      const x = this.screenX(snapshot.chassis.x + anchor.x * cosine - anchor.y * sine);
+      const y = this.screenY(snapshot.chassis.y + anchor.x * sine + anchor.y * cosine);
+      const wheel = snapshot.wheels[index]!;
+      const dx = this.screenX(wheel.x) - x;
+      const dy = this.screenY(wheel.y) - y;
+      const length = Math.hypot(dx, dy) || 1;
+      this.context.save();
+      this.context.strokeStyle = "#d9e8db";
+      this.context.lineWidth = 2;
+      this.context.beginPath();
+      this.context.moveTo(x, y);
+      for (let segment = 1; segment <= 6; segment += 1) {
+        const offset = segment === 6 ? 0 : (segment % 2 ? 2 : -2);
+        this.context.lineTo(x + dx * segment / 6 - dy / length * offset, y + dy * segment / 6 + dx / length * offset);
+      }
+      this.context.stroke();
+      this.context.restore();
+    }
+
     this.context.save();
     this.context.translate(
       this.screenX(snapshot.chassis.x),
@@ -306,6 +348,18 @@ export class CanvasRenderer {
     this.context.moveTo(phenotype.rearAnchor.x * scale, -phenotype.rearAnchor.y * scale);
     this.context.lineTo(phenotype.frontAnchor.x * scale, -phenotype.frontAnchor.y * scale);
     this.context.stroke();
+
+    this.context.beginPath();
+    this.context.arc(
+      phenotype.ballastCenter.x * scale,
+      -phenotype.ballastCenter.y * scale,
+      phenotype.ballastRadius * scale,
+      0, Math.PI * 2
+    );
+    this.context.fillStyle = "#193633";
+    this.context.fill();
+    this.context.strokeStyle = "rgba(246, 255, 223, 0.8)";
+    this.context.stroke();
     this.context.restore();
 
     this.drawWheel(
@@ -318,6 +372,18 @@ export class CanvasRenderer {
       phenotype.frontWheelRadius,
       phenotype.hue
     );
+
+    this.context.save();
+    this.context.font = "700 11px ui-monospace, monospace";
+    this.context.textAlign = "center";
+    this.context.lineWidth = 3;
+    this.context.strokeStyle = "#102728";
+    this.context.fillStyle = `hsl(${phenotype.hue} 85% 75%)`;
+    const labelX = this.screenX(snapshot.chassis.x);
+    const labelY = this.screenY(snapshot.chassis.y + genome.genes.height) - 10;
+    this.context.strokeText(genome.id, labelX, labelY);
+    this.context.fillText(genome.id, labelX, labelY);
+    this.context.restore();
   }
 
   private drawWheel(pose: { x: number; y: number; angle: number }, radius: number, hue: number): void {
@@ -378,6 +444,10 @@ export class CanvasRenderer {
   }
 
   private scale(): number {
+    return Math.min(this.zoomScale, this.baseScale());
+  }
+
+  private baseScale(): number {
     return Math.max(34, Math.min(58, this.width / 15));
   }
 }

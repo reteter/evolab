@@ -136,6 +136,7 @@
             <p class="form-note">
               Ustawienia są zamrożone po starcie. Zmienisz je w nowym przebiegu.
             </p>
+            <p class="form-note">28 genów · 4 pojazdy oceniane jednocześnie</p>
           </form>
 
           <div class="run-summary" id="run-summary" hidden>
@@ -153,7 +154,7 @@
           <div class="stage-heading">
             <div>
               <p class="step-label">Obserwuj</p>
-              <h2 id="stage-title">Próba na żywo</h2>
+              <h2 id="stage-title">Pojazdy na żywo</h2>
             </div>
             <div class="candidate-label">
               <span id="candidate-id">Jeszcze bez pojazdu</span>
@@ -171,7 +172,7 @@
             ></canvas>
             <div class="canvas-vignette" aria-hidden="true"></div>
             <div class="distance-hud">
-              <span>Dystans</span>
+              <span id="distance-label">Dystans lidera</span>
               <strong id="current-distance">0,0 m</strong>
             </div>
             <div class="headless-overlay" id="headless-overlay" hidden>
@@ -213,6 +214,10 @@
             Skróty: <kbd>spacja</kbd> pauza · <kbd>1</kbd> <kbd>2</kbd>
             <kbd>3</kbd> tempo · <kbd>R</kbd> replay
           </p>
+          <details class="genome-details">
+            <summary>Geny obserwowanego pojazdu · 28 cech</summary>
+            <dl id="genome-values"></dl>
+          </details>
         </section>
 
         <section class="metrics-panel" aria-labelledby="metrics-title">
@@ -296,7 +301,7 @@
       </main>
 
       <footer>
-        <span>Evolution Lab v0.1</span>
+        <span>Evolution Lab v0.2</span>
         <span>Planck.js · bez konta · wszystko lokalnie</span>
       </footer>
     </div>

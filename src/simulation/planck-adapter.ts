@@ -2,7 +2,7 @@ import {
   Circle,
   Edge,
   Polygon,
-  RevoluteJoint,
+  WheelJoint,
   Vec2,
   World,
   type Body
@@ -13,7 +13,6 @@ import type { SimulationPort, TrialWorld } from "./simulation-port";
 
 const GRAVITY = -9.81;
 const GROUND_FRICTION = 1.15;
-const VEHICLE_FRICTION = 1.05;
 
 export class PlanckSimulationAdapter implements SimulationPort {
   readonly id = "planck";
@@ -41,9 +40,10 @@ class PlanckTrialWorld implements TrialWorld {
     this.createGround(terrain);
 
     const phenotype = buildPhenotype(genome);
+    const genes = genome.genes;
     const underbodyClearance = Math.max(
-      -phenotype.rearAnchor.y + phenotype.rearWheelRadius,
-      -phenotype.frontAnchor.y + phenotype.frontWheelRadius
+      -phenotype.rearWheelCenter.y + phenotype.rearWheelRadius,
+      -phenotype.frontWheelCenter.y + phenotype.frontWheelRadius
     );
     const startY = terrain.startY + underbodyClearance + 0.32;
 
@@ -57,34 +57,51 @@ class PlanckTrialWorld implements TrialWorld {
     this.chassis.createFixture(
       new Polygon(phenotype.vertices.map(({ x, y }) => Vec2(x, y))),
       {
-        density: 1,
-        friction: VEHICLE_FRICTION,
-        restitution: 0.02
+        density: genes.chassisDensity,
+        friction: 1.05,
+        restitution: 0.02,
+        filterGroupIndex: -1
+      }
+    );
+
+    this.chassis.createFixture(
+      new Circle(Vec2(phenotype.ballastCenter.x, phenotype.ballastCenter.y), phenotype.ballastRadius),
+      {
+        density: genes.ballastMass / (Math.PI * phenotype.ballastRadius ** 2),
+        filterMaskBits: 0
       }
     );
 
     this.rearWheel = this.createWheel(
-      phenotype.rearAnchor.x,
-      startY + phenotype.rearAnchor.y,
-      phenotype.rearWheelRadius
+      phenotype.rearWheelCenter.x,
+      startY + phenotype.rearWheelCenter.y,
+      phenotype.rearWheelRadius,
+      genes.rearWheelDensity,
+      genes.rearWheelGrip
     );
     this.frontWheel = this.createWheel(
-      phenotype.frontAnchor.x,
-      startY + phenotype.frontAnchor.y,
-      phenotype.frontWheelRadius
+      phenotype.frontWheelCenter.x,
+      startY + phenotype.frontWheelCenter.y,
+      phenotype.frontWheelRadius,
+      genes.frontWheelDensity,
+      genes.frontWheelGrip
     );
 
     this.createMotor(
-      phenotype.rearAnchor,
+      phenotype.rearWheelCenter,
       this.rearWheel,
       phenotype.motorSpeed,
-      phenotype.motorTorque
+      phenotype.motorTorque * 2 * (1 - genes.driveBalance),
+      genes.rearSpringFrequency,
+      genes.rearSpringDamping
     );
     this.createMotor(
-      phenotype.frontAnchor,
+      phenotype.frontWheelCenter,
       this.frontWheel,
-      phenotype.motorSpeed,
-      phenotype.motorTorque
+      phenotype.motorSpeed * genes.frontSpeedRatio,
+      phenotype.motorTorque * 2 * genes.driveBalance,
+      genes.frontSpringFrequency,
+      genes.frontSpringDamping
     );
   }
 
@@ -137,7 +154,7 @@ class PlanckTrialWorld implements TrialWorld {
     }
   }
 
-  private createWheel(x: number, y: number, radius: number): Body {
+  private createWheel(x: number, y: number, radius: number, density: number, friction: number): Body {
     const body = this.world.createBody({
       type: "dynamic",
       position: Vec2(x, y),
@@ -147,9 +164,10 @@ class PlanckTrialWorld implements TrialWorld {
       bullet: true
     });
     body.createFixture(new Circle(radius), {
-      density: 0.9,
-      friction: VEHICLE_FRICTION,
-      restitution: 0.02
+      density,
+      friction,
+      restitution: 0.02,
+      filterGroupIndex: -1
     });
     return body;
   }
@@ -158,20 +176,25 @@ class PlanckTrialWorld implements TrialWorld {
     anchor: { x: number; y: number },
     wheel: Body,
     speed: number,
-    torque: number
+    torque: number,
+    frequency: number,
+    damping: number
   ): void {
     const worldAnchor = this.chassis.getWorldPoint(Vec2(anchor.x, anchor.y));
     this.world.createJoint(
-      new RevoluteJoint(
+      new WheelJoint(
         {
           enableMotor: true,
           motorSpeed: -speed,
           maxMotorTorque: torque,
+          frequencyHz: frequency,
+          dampingRatio: damping,
           collideConnected: false
         },
         this.chassis,
         wheel,
-        worldAnchor
+        worldAnchor,
+        Vec2(0, 1)
       )
     );
   }

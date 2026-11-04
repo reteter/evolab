@@ -1,4 +1,5 @@
-export const APP_BUILD_ID = "0.1.0";
+export const APP_BUILD_ID = "0.2.0";
+export const CONCURRENT_TRIALS = 4;
 export const FIXED_DELTA_SECONDS = 1 / 60;
 export const MAX_TRIAL_STEPS = 1_200;
 export const STAGNATION_STEPS = 240;
@@ -20,7 +21,7 @@ export interface RunManifest {
   physics: "planck@1.5.0";
   rng: "mulberry32-fnv1a@1";
   world: "rolling-hills@1";
-  evolution: "rank-uniform-triangular@1";
+  evolution: "rank-uniform-triangular@2";
   fixedDeltaSeconds: number;
   maxTrialSteps: number;
   stagnationSteps: number;
@@ -41,6 +42,22 @@ export interface VehicleGenes {
   frontWheelRadius: number;
   motorSpeed: number;
   motorTorque: number;
+  roofOffset: number;
+  chassisDensity: number;
+  rearWheelDensity: number;
+  frontWheelDensity: number;
+  rearWheelGrip: number;
+  frontWheelGrip: number;
+  rearRideHeight: number;
+  frontRideHeight: number;
+  rearSpringFrequency: number;
+  frontSpringFrequency: number;
+  rearSpringDamping: number;
+  frontSpringDamping: number;
+  driveBalance: number;
+  frontSpeedRatio: number;
+  ballastMass: number;
+  ballastOffset: number;
 }
 
 export type VehicleGeneKey = keyof VehicleGenes;
@@ -123,7 +140,7 @@ export function createManifest(config: RunConfig): RunManifest {
     physics: "planck@1.5.0",
     rng: "mulberry32-fnv1a@1",
     world: "rolling-hills@1",
-    evolution: "rank-uniform-triangular@1",
+    evolution: "rank-uniform-triangular@2",
     fixedDeltaSeconds: FIXED_DELTA_SECONDS,
     maxTrialSteps: MAX_TRIAL_STEPS,
     stagnationSteps: STAGNATION_STEPS,

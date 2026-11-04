@@ -8,7 +8,7 @@ Użytkownik ustawia seed, populację, mutację i elity, uruchamia przebieg, a na
 
 Nie wybiera rodziców ręcznie. Konfiguracja jest zamrożona dla przebiegu, a jej zmiana uruchamia nową populację.
 
-## Status — 2026-07-29
+## Status — 2026-11-04
 
 - Discovery analityczne: zakończone.
 - G0-P: zakończone pivotem od „Hodowcy jednej linii”.
@@ -20,7 +20,9 @@ Nie wybiera rodziców ręcznie. Konfiguracja jest zamrożona dla przebiegu, a je
 - Budżety M1–M4: zatwierdzone przez właściciela.
 - G1: GO udzielone przez właściciela.
 - M1–M4: zaimplementowane i zweryfikowane.
-- Następna bramka: G2-P — playtest i wybór jednego dalszego kierunku.
+- Bazowe v0 przeszło playtest właściciela.
+- v0.2: genom rozszerzony z 12 do 28 cech, zawieszenie, balast i 4 próby jednocześnie.
+- Następny krok: playtest rozszerzonej ewolucji pojazdów.
 
 Aktualny raport: [`docs/DECISION_BRIEF.md`](docs/DECISION_BRIEF.md).
 
@@ -65,6 +67,8 @@ W pierwszej wersji są:
 
 - długi teren generowany z seedu;
 - geometryczny pojazd o stałej topologii i dwóch kołach;
+- 28 dziedziczonych i mutowanych genów: geometria, masa, balast, opony, napęd i zawieszenie;
+- ocena 4 pojazdów jednocześnie, każdy z niezależną fizyką;
 - automatyczne pokolenia bez limitu;
 - elity, dobór rodziców, proste krzyżowanie i mutacja;
 - podstawowe ustawienia, wykres i replay najlepszego.
@@ -73,8 +77,9 @@ Nie ma edytora, ręcznego wyboru rodziców, zmiennej liczby kół, wielu świat�
 
 ## Kolejna bramka
 
-M1–M4 tworzą grywalną wersję kierunkową. Następny jest playtest G2-P, który
-ma wybrać najwyżej jeden dalszy kierunek albo uzasadniony stop.
+Po playteście M1–M4 właściciel wybrał bogatsze konstrukcje i ocenę kilku
+pojazdów naraz. Wersja v0.2 realizuje ten kierunek; wymaga oceny różnorodności
+pojazdów i tempa kolejnych pokoleń podczas playtestu.
 
 ## Uruchomienie
 

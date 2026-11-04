@@ -447,6 +447,36 @@ summary:focus-visible {
   font-weight: 750;
 }
 
+.genome-details {
+  margin: 12px 8px 4px;
+  color: rgba(237, 245, 236, 0.8);
+  font-size: 0.75rem;
+}
+
+.genome-details summary {
+  cursor: pointer;
+}
+
+.genome-details dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px 20px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.genome-details dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.genome-details dd {
+  margin: 0;
+  color: #c6f04d;
+  font-variant-numeric: tabular-nums;
+}
+
 .canvas-frame {
   position: relative;
   overflow: hidden;
