@@ -51,7 +51,9 @@ export const DEFAULT_RUN_CONFIG: RunConfig = {
   populationSize: 20,
   mutationRate: 0.18,
   mutationStrength: 0.14,
-  eliteCount: 1
+  eliteCount: 1,
+  terrainProfile: "smooth",
+  difficulty: 3
 };
 
 export function validateRunConfig(config: RunConfig): string[] {
@@ -82,6 +84,20 @@ export function validateRunConfig(config: RunConfig): string[] {
     config.eliteCount >= config.populationSize
   ) {
     issues.push("Liczba elit musi być nieujemna i mniejsza od populacji.");
+  }
+  if (
+    config.terrainProfile !== "smooth" &&
+    config.terrainProfile !== "steep-hills" &&
+    config.terrainProfile !== "bumpy"
+  ) {
+    issues.push("Nieprawidłowy profil terenu.");
+  }
+  if (
+    !Number.isInteger(config.difficulty) ||
+    config.difficulty < 1 ||
+    config.difficulty > 5
+  ) {
+    issues.push("Trudność musi być liczbą całkowitą od 1 do 5.");
   }
   return issues;
 }

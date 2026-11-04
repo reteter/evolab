@@ -102,7 +102,11 @@ export class RunController {
     this.replayReturnStatus = null;
 
     const frozenConfig = Object.freeze({ ...config });
-    const terrain = createTerrain(frozenConfig.seed);
+    const terrain = createTerrain(
+      frozenConfig.seed,
+      frozenConfig.terrainProfile,
+      frozenConfig.difficulty
+    );
     const manifest = createManifest(frozenConfig);
     const log = new RunLog();
     let population = createInitialPopulation(frozenConfig);

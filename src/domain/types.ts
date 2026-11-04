@@ -7,12 +7,16 @@ export const TRACE_EVERY_STEPS = 4;
 
 export type RunMode = "normal" | "fast" | "headless";
 
+export type TerrainProfile = "smooth" | "steep-hills" | "bumpy";
+
 export interface RunConfig {
   seed: string;
   populationSize: number;
   mutationRate: number;
   mutationStrength: number;
   eliteCount: number;
+  terrainProfile: TerrainProfile;
+  difficulty: number;
 }
 
 export interface RunManifest {
@@ -20,7 +24,7 @@ export interface RunManifest {
   buildId: string;
   physics: "planck@1.5.0";
   rng: "mulberry32-fnv1a@1";
-  world: "rolling-hills@1";
+  world: "terrain-profiles@1";
   evolution: "rank-uniform-triangular@2";
   fixedDeltaSeconds: number;
   maxTrialSteps: number;
@@ -81,6 +85,8 @@ export interface Point {
 
 export interface Terrain {
   seed: string;
+  profile: TerrainProfile;
+  difficulty: number;
   points: Point[];
   startY: number;
   endX: number;
@@ -139,7 +145,7 @@ export function createManifest(config: RunConfig): RunManifest {
     buildId: APP_BUILD_ID,
     physics: "planck@1.5.0",
     rng: "mulberry32-fnv1a@1",
-    world: "rolling-hills@1",
+    world: "terrain-profiles@1",
     evolution: "rank-uniform-triangular@2",
     fixedDeltaSeconds: FIXED_DELTA_SECONDS,
     maxTrialSteps: MAX_TRIAL_STEPS,

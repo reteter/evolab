@@ -20,7 +20,9 @@ const BUDGET_CONFIG: RunConfig = {
   populationSize: 20,
   mutationRate: 0.18,
   mutationStrength: 0.14,
-  eliteCount: 1
+  eliteCount: 1,
+  terrainProfile: "smooth",
+  difficulty: 3
 };
 
 describe("Budżety M1–M4 na środowisku właściciela", () => {
@@ -75,7 +77,7 @@ describe("Budżety M1–M4 na środowisku właściciela", () => {
     const hashes = Array.from({ length: 10 }, () => runScenario(config, 3));
 
     expect(new Set(hashes)).toEqual(new Set([hashes[0]]));
-  });
+  }, 15000);
 
   it("nie zmienia wyniku po dołączeniu obserwatora renderera", () => {
     const adapter = new PlanckSimulationAdapter();

@@ -63,6 +63,37 @@
                 </span>
               </label>
 
+              <label class="field" for="terrain-profile">
+                <span>Profil terenu</span>
+                <span class="field-hint">charakter trasy dla wszystkich pokoleń</span>
+                <select id="terrain-profile" name="terrainProfile">
+                  <option value="smooth">Łagodny</option>
+                  <option value="steep-hills">Strome wzgórza</option>
+                  <option value="bumpy">Wyboisty</option>
+                </select>
+              </label>
+
+              <label class="field field-range" for="difficulty">
+                <span>
+                  Trudność
+                  <output id="difficulty-output" for="difficulty">Trudność: 3/5</output>
+                </span>
+                <span class="field-hint">skalowanie amplitudy trasy</span>
+                <input
+                  id="difficulty"
+                  name="difficulty"
+                  type="range"
+                  value="3"
+                  min="1"
+                  max="5"
+                  step="1"
+                />
+                <div class="range-labels" aria-hidden="true">
+                  <span>Łatwiej</span>
+                  <span>Trudniej</span>
+                </div>
+              </label>
+
               <div class="field-row">
                 <label class="field" for="population">
                   <span>Populacja</span>
