@@ -11,7 +11,7 @@ import { ReplayPlayer } from "./presentation/replay-player";
 import { TrendChart } from "./presentation/trend-chart";
 import { ComparisonView } from "./presentation/comparison-view";
 import { RunController, type RunViewState } from "./run/run-controller";
-import { PlanckSimulationAdapter } from "./simulation/planck-adapter";
+import { WorkerPoolSimulationExecutor } from "./simulation/worker-pool-simulation-executor";
 import {
   IndexedDbStorage,
   type RunCheckpoint,
@@ -90,7 +90,7 @@ const comparisonView = new ComparisonView(
 );
 
 const replay = new ReplayPlayer();
-const controller = new RunController(new PlanckSimulationAdapter());
+const controller = new RunController(new WorkerPoolSimulationExecutor());
 
 let currentState = controller.getState();
 let renderedHistorySignature = "";
