@@ -4,7 +4,7 @@ import {
   GENE_RANGES,
   validateRunConfig
 } from "./domain/evolution";
-import type { Genome, RunConfig, RunMode } from "./domain/types";
+import type { Genome, RunConfig, RunMode, TerrainProfile } from "./domain/types";
 import { CanvasRenderer } from "./presentation/canvas-renderer";
 import { ReplayPlayer } from "./presentation/replay-player";
 import { TrendChart } from "./presentation/trend-chart";
@@ -14,6 +14,9 @@ import { PlanckSimulationAdapter } from "./simulation/planck-adapter";
 const form = required<HTMLFormElement>("#run-form");
 const configFields = required<HTMLFieldSetElement>("#config-fields");
 const seedInput = required<HTMLInputElement>("#seed");
+const terrainProfileSelect = required<HTMLSelectElement>("#terrain-profile");
+const difficultyInput = required<HTMLInputElement>("#difficulty");
+const difficultyOutput = required<HTMLOutputElement>("#difficulty-output");
 const populationInput = required<HTMLInputElement>("#population");
 const elitesInput = required<HTMLInputElement>("#elites");
 const mutationRateInput = required<HTMLInputElement>("#mutation-rate");
@@ -103,7 +106,7 @@ populationInput.addEventListener("input", () => {
   }
 });
 
-for (const input of [mutationRateInput, mutationStrengthInput]) {
+for (const input of [mutationRateInput, mutationStrengthInput, difficultyInput]) {
   input.addEventListener("input", updateRangeOutputs);
 }
 
@@ -252,8 +255,15 @@ function updateInterface(state: RunViewState): void {
   const showSummary = state.status === "stopped" && state.manifest !== null;
   runSummary.hidden = !showSummary;
   if (showSummary) {
+    const profileLabels: Record<TerrainProfile, string> = {
+      smooth: "łagodny",
+      "steep-hills": "strome wzgórza",
+      bumpy: "wyboisty"
+    };
+    const prof = state.manifest?.config.terrainProfile ?? "smooth";
+    const diff = state.manifest?.config.difficulty ?? 3;
     summaryResult.textContent = `${formatDistance(state.overallBest)} · ${state.completedGenerations} pokoleń`;
-    summaryDetail.textContent = `seed ${state.manifest?.config.seed ?? "—"}`;
+    summaryDetail.textContent = `seed ${state.manifest?.config.seed ?? "—"} · ${profileLabels[prof]} (trudność ${diff}/5)`;
   }
 }
 
@@ -315,13 +325,16 @@ function readConfig(): RunConfig {
     populationSize: Number(populationInput.value),
     mutationRate: Number(mutationRateInput.value) / 100,
     mutationStrength: Number(mutationStrengthInput.value) / 100,
-    eliteCount: Number(elitesInput.value)
+    eliteCount: Number(elitesInput.value),
+    terrainProfile: terrainProfileSelect.value as TerrainProfile,
+    difficulty: Number(difficultyInput.value)
   };
 }
 
 function updateRangeOutputs(): void {
   mutationRateOutput.value = `${mutationRateInput.value}%`;
   mutationStrengthOutput.value = `${mutationStrengthInput.value}%`;
+  difficultyOutput.value = `Trudność: ${difficultyInput.value}/5`;
 }
 
 function statusLabel(state: RunViewState): string {

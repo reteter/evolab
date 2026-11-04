@@ -61,6 +61,8 @@ class StaticWorld implements TrialWorld {
 function terrain(): Terrain {
   return {
     seed: "test",
+    profile: "smooth",
+    difficulty: 3,
     points: [
       { x: -10, y: 0 },
       { x: 100, y: 0 }

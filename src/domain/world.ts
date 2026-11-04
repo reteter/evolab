@@ -1,20 +1,68 @@
 import { createRng, deriveSeed, randomBetween } from "./rng";
-import type { Point, Terrain } from "./types";
+import type { Point, Terrain, TerrainProfile } from "./types";
 
-const SEGMENT_LENGTH = 4;
-const POINT_COUNT = 220;
 const START_X = -20;
+const TOTAL_SPAN = 876; // (220 - 1) * 4 = 876; endX = 856
 const FLAT_UNTIL_X = 12;
 
-export function createTerrain(seed: string): Terrain {
+interface ProfileConfig {
+  segmentLength: number;
+  broadFreqMult: number;
+  broadAmpMult: number;
+  mediumFreqMult: number;
+  mediumAmpMult: number;
+  detailFreqMult: number;
+  detailAmpMult: number;
+}
+
+const PROFILE_CONFIGS: Record<TerrainProfile, ProfileConfig> = {
+  smooth: {
+    segmentLength: 4,
+    broadFreqMult: 1,
+    broadAmpMult: 1,
+    mediumFreqMult: 1,
+    mediumAmpMult: 1,
+    detailFreqMult: 1,
+    detailAmpMult: 1
+  },
+  "steep-hills": {
+    segmentLength: 4,
+    broadFreqMult: 1.5,
+    broadAmpMult: 2.0,
+    mediumFreqMult: 1.5,
+    mediumAmpMult: 2.0,
+    detailFreqMult: 1.5,
+    detailAmpMult: 2.0
+  },
+  bumpy: {
+    segmentLength: 1,
+    broadFreqMult: 5.0,
+    broadAmpMult: 0.15,
+    mediumFreqMult: 5.0,
+    mediumAmpMult: 0.6,
+    detailFreqMult: 5.0,
+    detailAmpMult: 1.4
+  }
+};
+
+export function createTerrain(
+  seed: string,
+  profile: TerrainProfile = "smooth",
+  difficulty = 3
+): Terrain {
   const coefficients = terrainCoefficients(seed);
-  const points: Point[] = Array.from({ length: POINT_COUNT }, (_, index) => {
-    const x = START_X + index * SEGMENT_LENGTH;
-    return { x, y: terrainHeight(x, coefficients) };
+  const config = PROFILE_CONFIGS[profile] ?? PROFILE_CONFIGS.smooth;
+  const pointCount = Math.floor(TOTAL_SPAN / config.segmentLength) + 1;
+
+  const points: Point[] = Array.from({ length: pointCount }, (_, index) => {
+    const x = START_X + index * config.segmentLength;
+    return { x, y: terrainHeight(x, coefficients, profile, difficulty) };
   });
 
   return {
     seed,
+    profile,
+    difficulty,
     points,
     startY: interpolateTerrainHeight(points, 0),
     endX: points.at(-1)?.x ?? 0
@@ -66,22 +114,46 @@ function terrainCoefficients(seed: string): TerrainCoefficients {
   };
 }
 
-function terrainHeight(x: number, coefficients: TerrainCoefficients): number {
+function terrainHeight(
+  x: number,
+  coefficients: TerrainCoefficients,
+  profile: TerrainProfile,
+  difficulty: number
+): number {
   if (x <= FLAT_UNTIL_X) {
     return 0;
   }
 
+  const pConfig = PROFILE_CONFIGS[profile] ?? PROFILE_CONFIGS.smooth;
   const distance = x - FLAT_UNTIL_X;
   const ramp = Math.min(1, distance / 90);
-  const broad =
-    Math.sin(distance * 0.031 + coefficients.phaseA) * coefficients.amplitudeA;
-  const medium =
-    Math.sin(distance * 0.079 + coefficients.phaseB) * coefficients.amplitudeB;
-  const detail =
-    Math.sin(distance * 0.173 + coefficients.phaseC) * coefficients.amplitudeC;
-  const difficulty = Math.min(1.35, 0.72 + distance / 1_100);
 
-  return clamp((broad + medium + detail) * ramp * difficulty, -3.8, 5.4);
+  const broad =
+    Math.sin(distance * 0.031 * pConfig.broadFreqMult + coefficients.phaseA) *
+    (coefficients.amplitudeA * pConfig.broadAmpMult);
+  const medium =
+    Math.sin(distance * 0.079 * pConfig.mediumFreqMult + coefficients.phaseB) *
+    (coefficients.amplitudeB * pConfig.mediumAmpMult);
+  const detail =
+    Math.sin(distance * 0.173 * pConfig.detailFreqMult + coefficients.phaseC) *
+    (coefficients.amplitudeC * pConfig.detailAmpMult);
+
+  const progressiveDifficulty = Math.min(1.35, 0.72 + distance / 1_100);
+  const userDifficultyMultiplier = 0.5 + 0.25 * (difficulty - 1);
+
+  if (profile === "smooth" && difficulty === 3) {
+    return clamp(
+      (broad + medium + detail) * ramp * progressiveDifficulty,
+      -3.8,
+      5.4
+    );
+  }
+
+  return clamp(
+    (broad + medium + detail) * ramp * progressiveDifficulty * userDifficultyMultiplier,
+    -5.0,
+    7.0
+  );
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

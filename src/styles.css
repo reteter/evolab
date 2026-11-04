@@ -305,6 +305,15 @@ input[type="range"] {
   cursor: pointer;
 }
 
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: -2px;
+}
+
 .button {
   display: inline-flex;
   align-items: center;

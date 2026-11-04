@@ -22,17 +22,19 @@ export function buildPhenotype(genome: Genome): VehiclePhenotype {
   const rearFloor = -height * (0.52 - genes.floorTilt);
   const frontFloor = -height * (0.52 + genes.floorTilt);
 
+  const rawVertices: Point[] = [
+    { x: -width * genes.tailScale, y: -height * 0.08 },
+    { x: -width * 0.62, y: rearFloor },
+    { x: width * 0.58, y: frontFloor },
+    { x: width * genes.noseScale, y: -height * 0.04 },
+    { x: width * 0.78 * genes.noseScale, y: height * 0.34 },
+    { x: width * (0.42 * genes.roofScale + genes.roofOffset), y: height * 0.7 },
+    { x: width * (-0.44 * genes.roofScale + genes.roofOffset), y: height * 0.7 },
+    { x: -width * 0.78 * genes.tailScale, y: height * 0.32 }
+  ];
+
   return {
-    vertices: [
-      { x: -width * genes.tailScale, y: -height * 0.08 },
-      { x: -width * 0.62, y: rearFloor },
-      { x: width * 0.58, y: frontFloor },
-      { x: width * genes.noseScale, y: -height * 0.04 },
-      { x: width * 0.78 * genes.noseScale, y: height * 0.34 },
-      { x: width * (0.42 * genes.roofScale + genes.roofOffset), y: height * 0.7 },
-      { x: width * (-0.44 * genes.roofScale + genes.roofOffset), y: height * 0.7 },
-      { x: -width * 0.78 * genes.tailScale, y: height * 0.32 }
-    ],
+    vertices: ensureConvexHull(rawVertices),
     rearAnchor: {
       x: -width * genes.rearInset,
       y: rearFloor + height * 0.02
@@ -57,6 +59,45 @@ export function buildPhenotype(genome: Genome): VehiclePhenotype {
     motorTorque: genes.motorTorque,
     hue: Math.round(30 + genes.driveBalance * 280)
   };
+}
+
+export function ensureConvexHull(points: Point[]): Point[] {
+  if (points.length <= 3) {
+    return [...points];
+  }
+  const sorted = [...points].sort((a, b) =>
+    a.x === b.x ? a.y - b.y : a.x - b.x
+  );
+
+  const cross = (o: Point, a: Point, b: Point) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+  const lower: Point[] = [];
+  for (const p of sorted) {
+    while (
+      lower.length >= 2 &&
+      cross(lower[lower.length - 2]!, lower[lower.length - 1]!, p) <= 1e-9
+    ) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+
+  const upper: Point[] = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i]!;
+    while (
+      upper.length >= 2 &&
+      cross(upper[upper.length - 2]!, upper[upper.length - 1]!, p) <= 1e-9
+    ) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
 }
 
 export function polygonIsConvex(vertices: Point[]): boolean {
