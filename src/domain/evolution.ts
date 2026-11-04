@@ -5,46 +5,57 @@ import type {
   RunConfig,
   TrialResult,
   VehicleGeneKey,
-  VehicleGenes
+  VehicleGenes,
+  WheelCountMode
 } from "./types";
 
-interface GeneRange {
+export interface GeneRange {
   key: VehicleGeneKey;
   label: string;
   minimum: number;
   maximum: number;
 }
 
-export const GENE_RANGES: readonly GeneRange[] = [
+export const BODY_GENE_RANGES: readonly GeneRange[] = [
   { key: "width", label: "Szerokość korpusu", minimum: 1.05, maximum: 2.6 },
   { key: "height", label: "Wysokość korpusu", minimum: 0.55, maximum: 1.45 },
   { key: "roofScale", label: "Szerokość dachu", minimum: 0.6, maximum: 1.1 },
   { key: "noseScale", label: "Długość przodu", minimum: 0.9, maximum: 1.08 },
   { key: "tailScale", label: "Długość tyłu", minimum: 0.9, maximum: 1.08 },
   { key: "floorTilt", label: "Nachylenie podwozia", minimum: -0.08, maximum: 0.08 },
-  { key: "rearInset", label: "Rozstaw tylnego koła", minimum: 0.48, maximum: 0.88 },
-  { key: "frontInset", label: "Rozstaw przedniego koła", minimum: 0.48, maximum: 0.88 },
-  { key: "rearWheelRadius", label: "Promień tylnego koła", minimum: 0.28, maximum: 1 },
-  { key: "frontWheelRadius", label: "Promień przedniego koła", minimum: 0.28, maximum: 1 },
-  { key: "motorSpeed", label: "Obroty napędu", minimum: 8, maximum: 22 },
-  { key: "motorTorque", label: "Moment napędu", minimum: 28, maximum: 100 },
   { key: "roofOffset", label: "Przesunięcie dachu", minimum: -0.18, maximum: 0.18 },
   { key: "chassisDensity", label: "Gęstość korpusu", minimum: 0.45, maximum: 1.6 },
-  { key: "rearWheelDensity", label: "Gęstość tylnego koła", minimum: 0.55, maximum: 1.6 },
-  { key: "frontWheelDensity", label: "Gęstość przedniego koła", minimum: 0.55, maximum: 1.6 },
-  { key: "rearWheelGrip", label: "Przyczepność tyłu", minimum: 0.5, maximum: 2 },
-  { key: "frontWheelGrip", label: "Przyczepność przodu", minimum: 0.5, maximum: 2 },
-  { key: "rearRideHeight", label: "Prześwit tyłu", minimum: 0.08, maximum: 0.55 },
-  { key: "frontRideHeight", label: "Prześwit przodu", minimum: 0.08, maximum: 0.55 },
-  { key: "rearSpringFrequency", label: "Sprężyna tyłu (Hz)", minimum: 2.5, maximum: 7 },
-  { key: "frontSpringFrequency", label: "Sprężyna przodu (Hz)", minimum: 2.5, maximum: 7 },
-  { key: "rearSpringDamping", label: "Tłumienie tyłu", minimum: 0.35, maximum: 0.95 },
-  { key: "frontSpringDamping", label: "Tłumienie przodu", minimum: 0.35, maximum: 0.95 },
-  { key: "driveBalance", label: "Udział napędu na przód", minimum: 0, maximum: 1 },
-  { key: "frontSpeedRatio", label: "Względne obroty przodu", minimum: 0.65, maximum: 1.3 },
   { key: "ballastMass", label: "Masa balastu", minimum: 0, maximum: 2.8 },
-  { key: "ballastOffset", label: "Położenie balastu", minimum: -0.65, maximum: 0.65 }
+  { key: "ballastOffset", label: "Położenie balastu", minimum: -0.65, maximum: 0.65 },
+  { key: "motorSpeed", label: "Obroty napędu", minimum: 8, maximum: 22 },
+  { key: "motorTorque", label: "Moment napędu", minimum: 28, maximum: 100 }
 ];
+
+export function getWheelSlotGeneRanges(slotIndex: number): readonly GeneRange[] {
+  const slotNum = slotIndex + 1;
+  const prefix = `wheel${slotIndex}` as const;
+  return [
+    { key: `${prefix}Radius` as VehicleGeneKey, label: `Koło ${slotNum} · Promień`, minimum: 0.28, maximum: 1 },
+    { key: `${prefix}MountX` as VehicleGeneKey, label: `Koło ${slotNum} · Położenie mocowania`, minimum: -0.9, maximum: 0.9 },
+    { key: `${prefix}Density` as VehicleGeneKey, label: `Koło ${slotNum} · Gęstość`, minimum: 0.55, maximum: 1.6 },
+    { key: `${prefix}Grip` as VehicleGeneKey, label: `Koło ${slotNum} · Przyczepność`, minimum: 0.5, maximum: 2 },
+    { key: `${prefix}RideHeight` as VehicleGeneKey, label: `Koło ${slotNum} · Prześwit`, minimum: 0.08, maximum: 0.55 },
+    { key: `${prefix}SpringFrequency` as VehicleGeneKey, label: `Koło ${slotNum} · Sprężyna (Hz)`, minimum: 2.5, maximum: 7 },
+    { key: `${prefix}SpringDamping` as VehicleGeneKey, label: `Koło ${slotNum} · Tłumienie`, minimum: 0.35, maximum: 0.95 },
+    { key: `${prefix}DriveShare` as VehicleGeneKey, label: `Koło ${slotNum} · Udział w napędzie`, minimum: 0, maximum: 1 },
+    { key: `${prefix}SpeedRatio` as VehicleGeneKey, label: `Koło ${slotNum} · Względne obroty`, minimum: 0.65, maximum: 1.3 }
+  ];
+}
+
+export const CONTINUOUS_GENE_RANGES: readonly GeneRange[] = [
+  ...BODY_GENE_RANGES,
+  ...getWheelSlotGeneRanges(0),
+  ...getWheelSlotGeneRanges(1),
+  ...getWheelSlotGeneRanges(2),
+  ...getWheelSlotGeneRanges(3)
+];
+
+export const GENE_RANGES: readonly GeneRange[] = CONTINUOUS_GENE_RANGES;
 
 export const DEFAULT_RUN_CONFIG: RunConfig = {
   seed: "evolab-42",
@@ -53,8 +64,21 @@ export const DEFAULT_RUN_CONFIG: RunConfig = {
   mutationStrength: 0.14,
   eliteCount: 1,
   terrainProfile: "smooth",
-  difficulty: 3
+  difficulty: 3,
+  wheelCountMode: "2-4"
 };
+
+export function allowedWheelCounts(mode: WheelCountMode): readonly number[] {
+  switch (mode) {
+    case "2":
+      return [2];
+    case "2-3":
+      return [2, 3];
+    case "2-4":
+    default:
+      return [2, 3, 4];
+  }
+}
 
 export function validateRunConfig(config: RunConfig): string[] {
   const issues: string[] = [];
@@ -99,6 +123,13 @@ export function validateRunConfig(config: RunConfig): string[] {
   ) {
     issues.push("Trudność musi być liczbą całkowitą od 1 do 5.");
   }
+  if (
+    config.wheelCountMode !== "2" &&
+    config.wheelCountMode !== "2-3" &&
+    config.wheelCountMode !== "2-4"
+  ) {
+    issues.push("Nieprawidłowy tryb liczby kół.");
+  }
   return issues;
 }
 
@@ -107,7 +138,8 @@ export function createInitialPopulation(config: RunConfig): Genome[] {
     id: genomeId(1, index + 1),
     generation: 1,
     genes: randomGenes(
-      createRng(deriveSeed(config.seed, "population-init", 1, index + 1))
+      createRng(deriveSeed(config.seed, "population-init", 1, index + 1)),
+      config.wheelCountMode
     ),
     lineage: { kind: "founder" }
   }));
@@ -208,9 +240,12 @@ export function hashEvolutionState(
       id: genome.id,
       generation: genome.generation,
       lineage: genome.lineage,
-      genes: Object.fromEntries(
-        GENE_RANGES.map(({ key }) => [key, rounded(genome.genes[key])])
-      )
+      genes: {
+        wheelCount: genome.genes.wheelCount,
+        ...Object.fromEntries(
+          CONTINUOUS_GENE_RANGES.map(({ key }) => [key, rounded(genome.genes[key])])
+        )
+      }
     }))
   });
 
@@ -222,8 +257,12 @@ export function hashEvolutionState(
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-export function genesAreInRange(genes: VehicleGenes): boolean {
-  return GENE_RANGES.every(
+export function genesAreInRange(genes: VehicleGenes, mode?: WheelCountMode): boolean {
+  const allowed = mode ? allowedWheelCounts(mode) : [2, 3, 4];
+  if (!allowed.includes(genes.wheelCount)) {
+    return false;
+  }
+  return CONTINUOUS_GENE_RANGES.every(
     ({ key, minimum, maximum }) =>
       Number.isFinite(genes[key]) &&
       genes[key] >= minimum &&
@@ -231,13 +270,20 @@ export function genesAreInRange(genes: VehicleGenes): boolean {
   );
 }
 
-function randomGenes(random: RandomSource): VehicleGenes {
-  return Object.fromEntries(
-    GENE_RANGES.map(({ key, minimum, maximum }) => [
-      key,
-      randomBetween(random, minimum, maximum)
-    ])
-  ) as unknown as VehicleGenes;
+function randomGenes(random: RandomSource, mode: WheelCountMode): VehicleGenes {
+  const allowed = allowedWheelCounts(mode);
+  const chosenIndex = Math.floor(random() * allowed.length);
+  const wheelCount = allowed[Math.min(chosenIndex, allowed.length - 1)] ?? 2;
+
+  const genes: Record<string, number> = {
+    wheelCount
+  };
+
+  for (const { key, minimum, maximum } of CONTINUOUS_GENE_RANGES) {
+    genes[key] = randomBetween(random, minimum, maximum);
+  }
+
+  return genes as unknown as VehicleGenes;
 }
 
 function selectRankBiased(
@@ -275,9 +321,15 @@ function crossoverGenes(
   second: VehicleGenes,
   random: RandomSource
 ): VehicleGenes {
-  return Object.fromEntries(
-    GENE_RANGES.map(({ key }) => [key, random() < 0.5 ? first[key] : second[key]])
-  ) as unknown as VehicleGenes;
+  const crossed: Record<string, number> = {
+    wheelCount: random() < 0.5 ? first.wheelCount : second.wheelCount
+  };
+
+  for (const { key } of CONTINUOUS_GENE_RANGES) {
+    crossed[key] = random() < 0.5 ? first[key] : second[key];
+  }
+
+  return crossed as unknown as VehicleGenes;
 }
 
 function mutateGenes(
@@ -286,7 +338,20 @@ function mutateGenes(
   random: RandomSource
 ): VehicleGenes {
   const mutated = { ...source };
-  for (const { key, minimum, maximum } of GENE_RANGES) {
+  const allowed = allowedWheelCounts(config.wheelCountMode);
+  const minWheels = Math.min(...allowed);
+  const maxWheels = Math.max(...allowed);
+
+  // Mutacja liczby kół: zmiana o losowe -1 lub +1 z prawdopodobieństwem mutationRate
+  if (minWheels < maxWheels && random() < config.mutationRate) {
+    const delta = random() < 0.5 ? -1 : 1;
+    mutated.wheelCount = Math.min(maxWheels, Math.max(minWheels, mutated.wheelCount + delta));
+  } else if (!allowed.includes(mutated.wheelCount)) {
+    mutated.wheelCount = Math.min(maxWheels, Math.max(minWheels, mutated.wheelCount));
+  }
+
+  // Mutacja cech ciągłych
+  for (const { key, minimum, maximum } of CONTINUOUS_GENE_RANGES) {
     if (random() >= config.mutationRate) {
       continue;
     }

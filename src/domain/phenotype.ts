@@ -1,18 +1,25 @@
-import type { Genome, Point } from "./types";
+import type { Genome, Point, VehicleGenes } from "./types";
+
+export interface WheelPhenotype {
+  anchor: Point;
+  center: Point;
+  radius: number;
+  density: number;
+  grip: number;
+  springFrequency: number;
+  springDamping: number;
+  torque: number;
+  speed: number;
+}
 
 export interface VehiclePhenotype {
   vertices: Point[];
-  rearAnchor: Point;
-  frontAnchor: Point;
-  rearWheelCenter: Point;
-  frontWheelCenter: Point;
   ballastCenter: Point;
   ballastRadius: number;
-  rearWheelRadius: number;
-  frontWheelRadius: number;
   motorSpeed: number;
   motorTorque: number;
   hue: number;
+  wheels: WheelPhenotype[];
 }
 
 export function buildPhenotype(genome: Genome): VehiclePhenotype {
@@ -33,32 +40,129 @@ export function buildPhenotype(genome: Genome): VehiclePhenotype {
     { x: -width * 0.78 * genes.tailScale, y: height * 0.32 }
   ];
 
+  const activeCount = Math.min(4, Math.max(2, genes.wheelCount || 2));
+  const rawWheels = [
+    getWheelSlotData(genes, 0),
+    getWheelSlotData(genes, 1),
+    getWheelSlotData(genes, 2),
+    getWheelSlotData(genes, 3)
+  ].slice(0, activeCount);
+
+  // Budżet momentu obrotowego:
+  // totalTorque = 2 * motorTorque
+  // torque[i] = totalTorque * driveShare[i] / suma aktywnych driveShare
+  const totalTorque = 2 * genes.motorTorque;
+  const totalDriveShare = rawWheels.reduce((sum, w) => sum + w.driveShare, 0);
+
+  const wheels: WheelPhenotype[] = rawWheels.map((slot) => {
+    const anchorX = width * slot.mountX;
+    // Wysokość podłogi w punkcie anchorX:
+    // interpolacja liniowa między (-0.62*width, rearFloor) a (0.58*width, frontFloor)
+    const t = clamp((anchorX - (-width * 0.62)) / (width * 0.58 - (-width * 0.62)), 0, 1);
+    const floorY = rearFloor + t * (frontFloor - rearFloor);
+    const anchorY = floorY + height * 0.02;
+
+    const torque =
+      totalDriveShare > 1e-9
+        ? (totalTorque * slot.driveShare) / totalDriveShare
+        : totalTorque / activeCount;
+
+    const speed = genes.motorSpeed * slot.speedRatio;
+
+    return {
+      anchor: { x: anchorX, y: anchorY },
+      center: { x: anchorX, y: anchorY - slot.rideHeight },
+      radius: slot.radius,
+      density: slot.density,
+      grip: slot.grip,
+      springFrequency: slot.springFrequency,
+      springDamping: slot.springDamping,
+      torque,
+      speed
+    };
+  });
+
+  const frontBias = wheels.length > 1 ? (wheels[1]?.torque ?? 0) / (totalTorque || 1) : 0.5;
+
   return {
     vertices: ensureConvexHull(rawVertices),
-    rearAnchor: {
-      x: -width * genes.rearInset,
-      y: rearFloor + height * 0.02
-    },
-    frontAnchor: {
-      x: width * genes.frontInset,
-      y: frontFloor + height * 0.02
-    },
-    rearWheelCenter: {
-      x: -width * genes.rearInset,
-      y: rearFloor + height * 0.02 - genes.rearRideHeight
-    },
-    frontWheelCenter: {
-      x: width * genes.frontInset,
-      y: frontFloor + height * 0.02 - genes.frontRideHeight
-    },
     ballastCenter: { x: width * genes.ballastOffset, y: -height * 0.08 },
     ballastRadius: 0.1 + genes.ballastMass * 0.035,
-    rearWheelRadius: genes.rearWheelRadius,
-    frontWheelRadius: genes.frontWheelRadius,
     motorSpeed: genes.motorSpeed,
     motorTorque: genes.motorTorque,
-    hue: Math.round(30 + genes.driveBalance * 280)
+    hue: Math.round(30 + frontBias * 280),
+    wheels
   };
+}
+
+interface RawWheelSlot {
+  radius: number;
+  mountX: number;
+  density: number;
+  grip: number;
+  rideHeight: number;
+  springFrequency: number;
+  springDamping: number;
+  driveShare: number;
+  speedRatio: number;
+}
+
+function getWheelSlotData(genes: VehicleGenes, index: number): RawWheelSlot {
+  switch (index) {
+    case 0:
+      return {
+        radius: genes.wheel0Radius,
+        mountX: genes.wheel0MountX,
+        density: genes.wheel0Density,
+        grip: genes.wheel0Grip,
+        rideHeight: genes.wheel0RideHeight,
+        springFrequency: genes.wheel0SpringFrequency,
+        springDamping: genes.wheel0SpringDamping,
+        driveShare: genes.wheel0DriveShare,
+        speedRatio: genes.wheel0SpeedRatio
+      };
+    case 1:
+      return {
+        radius: genes.wheel1Radius,
+        mountX: genes.wheel1MountX,
+        density: genes.wheel1Density,
+        grip: genes.wheel1Grip,
+        rideHeight: genes.wheel1RideHeight,
+        springFrequency: genes.wheel1SpringFrequency,
+        springDamping: genes.wheel1SpringDamping,
+        driveShare: genes.wheel1DriveShare,
+        speedRatio: genes.wheel1SpeedRatio
+      };
+    case 2:
+      return {
+        radius: genes.wheel2Radius,
+        mountX: genes.wheel2MountX,
+        density: genes.wheel2Density,
+        grip: genes.wheel2Grip,
+        rideHeight: genes.wheel2RideHeight,
+        springFrequency: genes.wheel2SpringFrequency,
+        springDamping: genes.wheel2SpringDamping,
+        driveShare: genes.wheel2DriveShare,
+        speedRatio: genes.wheel2SpeedRatio
+      };
+    case 3:
+    default:
+      return {
+        radius: genes.wheel3Radius,
+        mountX: genes.wheel3MountX,
+        density: genes.wheel3Density,
+        grip: genes.wheel3Grip,
+        rideHeight: genes.wheel3RideHeight,
+        springFrequency: genes.wheel3SpringFrequency,
+        springDamping: genes.wheel3SpringDamping,
+        driveShare: genes.wheel3DriveShare,
+        speedRatio: genes.wheel3SpeedRatio
+      };
+  }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 export function ensureConvexHull(points: Point[]): Point[] {

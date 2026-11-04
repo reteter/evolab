@@ -3,8 +3,13 @@ import type {
   GenerationSummary,
   Genome,
   RunConfig,
-  RunManifest
+  RunManifest,
+  VehicleGenes,
+  WheelCountMode
 } from "../domain/types";
+import { migrateSavedRun } from "./export-import";
+
+export type { Genome, RunConfig, VehicleGenes, WheelCountMode };
 
 export interface RunCheckpoint {
   completedGenerations: number;
@@ -94,7 +99,10 @@ export class IndexedDbStorage implements StoragePort {
       const store = tx.objectStore(RUNS_STORE);
       const req = store.get(id);
 
-      req.onsuccess = () => resolve(req.result as SavedRun | undefined);
+      req.onsuccess = () => {
+        const result = req.result as SavedRun | undefined;
+        resolve(result ? migrateSavedRun(result) : undefined);
+      };
       req.onerror = () => reject(req.error);
     });
   }
@@ -107,7 +115,8 @@ export class IndexedDbStorage implements StoragePort {
       const req = store.getAll();
 
       req.onsuccess = () => {
-        const runs = (req.result as SavedRun[]) || [];
+        const rawRuns = (req.result as SavedRun[]) || [];
+        const runs = rawRuns.map(migrateSavedRun);
         runs.sort((a, b) => b.updatedAt - a.updatedAt);
         resolve(runs);
       };

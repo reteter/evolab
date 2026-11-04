@@ -139,7 +139,7 @@ export class TrialEvaluation {
       distance: this.maxDistance,
       finite: snapshot.finite,
       chassis: { ...snapshot.chassis },
-      wheels: [{ ...snapshot.wheels[0] }, { ...snapshot.wheels[1] }]
+      wheels: snapshot.wheels.map((wheel) => ({ ...wheel }))
     });
   }
 }
