@@ -391,8 +391,10 @@ export class RunController {
     this.replayReturnStatus = null;
     if (target === "running" && !this.stopRequested) {
       this.paused = false;
-      this.executor.resume(this.token);
       this.state = { ...this.state, status: "running", message: "Przebieg wznowiony" };
+      this.emit();
+      this.executor.resume(this.token);
+      return;
     } else if (target === "paused") {
       this.paused = true;
       this.state = { ...this.state, status: "paused", message: "Pauza" };
