@@ -48,6 +48,15 @@ export class RunLog {
   getSamplingStride(): number {
     return this.samplingStride;
   }
+
+  restore(summaries: readonly GenerationSummary[], samplingStride: number, bestRecord: BestRecord | null): void {
+    this.summaries = summaries.map((s) => ({ ...s }));
+    this.samplingStride = samplingStride;
+    this.bestRecord = bestRecord !== null ? {
+      generation: bestRecord.generation,
+      result: cloneTrialResult(bestRecord.result)
+    } : null;
+  }
 }
 
 function compareResults(left: TrialResult, right: TrialResult): number {

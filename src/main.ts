@@ -8,8 +8,15 @@ import type { Genome, RunConfig, RunMode, TerrainProfile } from "./domain/types"
 import { CanvasRenderer } from "./presentation/canvas-renderer";
 import { ReplayPlayer } from "./presentation/replay-player";
 import { TrendChart } from "./presentation/trend-chart";
+import { ComparisonView } from "./presentation/comparison-view";
 import { RunController, type RunViewState } from "./run/run-controller";
 import { PlanckSimulationAdapter } from "./simulation/planck-adapter";
+import {
+  IndexedDbStorage,
+  type RunCheckpoint,
+  type SavedRun
+} from "./storage/indexed-db";
+import { exportRunToJson, importRunFromJson } from "./storage/export-import";
 
 const form = required<HTMLFormElement>("#run-form");
 const configFields = required<HTMLFieldSetElement>("#config-fields");
@@ -55,13 +62,30 @@ const summaryResult = required<HTMLElement>("#summary-result");
 const summaryDetail = required<HTMLElement>("#summary-detail");
 const canvas = required<HTMLCanvasElement>("#simulation-canvas");
 const genomeValues = required<HTMLElement>("#genome-values");
+const saveStatusText = required<HTMLElement>("#save-status-text");
+const resumeLastRunButton = required<HTMLButtonElement>("#resume-last-run");
+const savedRunsGrid = required<HTMLElement>("#saved-runs-grid");
+const importFileInput = required<HTMLInputElement>("#import-file-input");
+const importRunBtn = required<HTMLButtonElement>("#import-run-btn");
+const compareBtn = required<HTMLButtonElement>("#compare-btn");
+const comparisonSection = required<HTMLElement>("#comparison-section");
+const closeComparisonBtn = required<HTMLButtonElement>("#close-comparison-btn");
 
+const storage = new IndexedDbStorage();
 const renderer = new CanvasRenderer(canvas);
 const chart = new TrendChart(
   required<SVGSVGElement>("#trend-chart"),
   required<HTMLTableSectionElement>("#trend-table-body"),
   required<HTMLElement>("#chart-description")
 );
+const comparisonView = new ComparisonView(
+  comparisonSection,
+  required<SVGSVGElement>("#comparison-chart"),
+  required<HTMLTableSectionElement>("#comparison-table-body"),
+  required<HTMLElement>("#comparison-description"),
+  required<HTMLElement>("#comparison-legend")
+);
+
 const replay = new ReplayPlayer();
 const controller = new RunController(new PlanckSimulationAdapter());
 
@@ -69,11 +93,53 @@ let currentState = controller.getState();
 let renderedHistorySignature = "";
 let headlessWasVisible = false;
 let inspectedGenome: Genome | null = null;
+let savedRunsCache: SavedRun[] = [];
+let selectedRunIdsForComparison = new Set<string>();
+let activeRunName: string | null = null;
+const deletedRunIds = new Set<string>();
 
 const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
 renderer.setReducedMotion(motionPreference.matches);
 motionPreference.addEventListener("change", ({ matches }) => {
   renderer.setReducedMotion(matches);
+});
+
+controller.setCheckpointHandler(async (runId: string, checkpoint: RunCheckpoint) => {
+  if (deletedRunIds.has(runId)) {
+    return;
+  }
+  saveStatusText.textContent = "Zapisywanie…";
+  try {
+    let run = await storage.getRun(runId);
+    if (deletedRunIds.has(runId)) {
+      return;
+    }
+    if (!run) {
+      const now = Date.now();
+      const defaultName = activeRunName ?? formatDateName(new Date(now));
+      run = {
+        id: runId,
+        name: defaultName,
+        createdAt: now,
+        updatedAt: now,
+        checkpoint
+      };
+    } else {
+      run.updatedAt = Date.now();
+      run.checkpoint = checkpoint;
+    }
+    await storage.saveRun(run);
+    await storage.setLastActiveRunId(runId);
+    if (checkpoint.completedGenerations === 0) {
+      saveStatusText.textContent = "Zapisano stan początkowy";
+    } else {
+      saveStatusText.textContent = `Zapisano po pokoleniu ${checkpoint.completedGenerations}`;
+    }
+    await refreshSavedRunsList();
+  } catch (err) {
+    console.error("Save error:", err);
+    saveStatusText.textContent = "Nie udało się zapisać przebiegu";
+  }
 });
 
 controller.subscribe((state) => {
@@ -92,10 +158,56 @@ form.addEventListener("submit", (event) => {
 
   replay.cancel();
   formError.textContent = "";
+  activeRunName = formatDateName(new Date());
   void controller.start(config).catch((error: unknown) => {
     formError.textContent =
       error instanceof Error ? error.message : "Nie udało się uruchomić przebiegu.";
   });
+});
+
+resumeLastRunButton.addEventListener("click", async () => {
+  const lastActiveId = await storage.getLastActiveRunId();
+  if (!lastActiveId) {
+    return;
+  }
+  const run = await storage.getRun(lastActiveId);
+  if (!run) {
+    return;
+  }
+  await resumeRun(run);
+});
+
+importRunBtn.addEventListener("click", () => {
+  importFileInput.value = "";
+  importFileInput.click();
+});
+
+importFileInput.addEventListener("change", async () => {
+  const file = importFileInput.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const importedRun = importRunFromJson(text);
+    await storage.saveRun(importedRun);
+    await refreshSavedRunsList();
+    alert(`Pomyślnie zaimportowano przebieg: ${importedRun.name}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "Nie udało się zaimportować pliku.");
+  }
+});
+
+compareBtn.addEventListener("click", () => {
+  const runsToCompare = savedRunsCache.filter((r) =>
+    selectedRunIdsForComparison.has(r.id)
+  );
+  if (runsToCompare.length >= 2) {
+    comparisonView.render(runsToCompare);
+    comparisonSection.scrollIntoView({ behavior: "smooth" });
+  }
+});
+
+closeComparisonBtn.addEventListener("click", () => {
+  comparisonSection.hidden = true;
 });
 
 populationInput.addEventListener("input", () => {
@@ -152,6 +264,286 @@ document.addEventListener("keydown", (event) => {
 
 updateRangeOutputs();
 chart.render([]);
+void initStorageAndUi();
+
+async function initStorageAndUi(): Promise<void> {
+  await refreshSavedRunsList();
+  const lastActiveId = await storage.getLastActiveRunId();
+  if (lastActiveId) {
+    const run = await storage.getRun(lastActiveId);
+    if (run) {
+      resumeLastRunButton.disabled = false;
+      resumeLastRunButton.textContent = `Wznów ostatni (${run.name})`;
+    }
+  }
+}
+
+async function refreshSavedRunsList(): Promise<void> {
+  savedRunsCache = await storage.listRuns();
+  const lastActiveId = await storage.getLastActiveRunId();
+  resumeLastRunButton.disabled = !lastActiveId || !savedRunsCache.some((r) => r.id === lastActiveId);
+  if (lastActiveId) {
+    const lastRun = savedRunsCache.find((r) => r.id === lastActiveId);
+    if (lastRun) {
+      resumeLastRunButton.textContent = `Wznów ostatni (${lastRun.name})`;
+    }
+  }
+
+  // Prune comparison selection if run was deleted
+  for (const id of Array.from(selectedRunIdsForComparison)) {
+    if (!savedRunsCache.some((r) => r.id === id)) {
+      selectedRunIdsForComparison.delete(id);
+    }
+  }
+
+  renderSavedRunsGrid();
+  updateCompareButton();
+}
+
+function renderSavedRunsGrid(): void {
+  savedRunsGrid.replaceChildren();
+
+  if (savedRunsCache.length === 0) {
+    const emptyP = document.createElement("p");
+    emptyP.className = "saved-runs-empty";
+    emptyP.textContent = "Brak zapisanych przebiegów w IndexedDB.";
+    savedRunsGrid.append(emptyP);
+    return;
+  }
+
+  // Determine criteria of first selected run if any
+  const firstSelectedRun = savedRunsCache.find((r) =>
+    selectedRunIdsForComparison.has(r.id)
+  );
+
+  for (const run of savedRunsCache) {
+    const card = document.createElement("div");
+    card.className = "run-card";
+
+    // Card Header
+    const header = document.createElement("div");
+    header.className = "run-card-header";
+
+    const title = document.createElement("h3");
+    title.className = "run-card-title";
+    title.textContent = run.name;
+
+    // Checkbox for comparison
+    const selectLabel = document.createElement("label");
+    selectLabel.className = "run-card-select";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selectedRunIdsForComparison.has(run.id);
+
+    const isMatch =
+      !firstSelectedRun ||
+      (firstSelectedRun.checkpoint.config.seed === run.checkpoint.config.seed &&
+        firstSelectedRun.checkpoint.config.terrainProfile ===
+          run.checkpoint.config.terrainProfile &&
+        firstSelectedRun.checkpoint.config.difficulty ===
+          run.checkpoint.config.difficulty);
+
+    const maxReached =
+      selectedRunIdsForComparison.size >= 3 &&
+      !selectedRunIdsForComparison.has(run.id);
+
+    if (!isMatch) {
+      checkbox.disabled = true;
+      selectLabel.title = "Inny seed lub teren";
+    } else if (maxReached) {
+      checkbox.disabled = true;
+      selectLabel.title = "Maksymalnie 3 przebiegi";
+    }
+
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        selectedRunIdsForComparison.add(run.id);
+      } else {
+        selectedRunIdsForComparison.delete(run.id);
+      }
+      renderSavedRunsGrid();
+      updateCompareButton();
+    });
+
+    const checkText = document.createElement("span");
+    checkText.textContent = "Porównaj";
+    if (!isMatch) {
+      checkText.textContent = "Inny seed/teren";
+    }
+
+    selectLabel.append(checkbox, checkText);
+    header.append(title, selectLabel);
+
+    // Meta details
+    const dl = document.createElement("dl");
+    dl.className = "run-card-meta";
+
+    const profileLabels: Record<TerrainProfile, string> = {
+      smooth: "Łagodny",
+      "steep-hills": "Strome wzgórza",
+      bumpy: "Wyboisty"
+    };
+
+    const metaItems: [string, string][] = [
+      ["Seed", run.checkpoint.config.seed],
+      ["Profil terenu", profileLabels[run.checkpoint.config.terrainProfile]],
+      ["Trudność", `${run.checkpoint.config.difficulty}/5`],
+      ["Ukończone pokolenia", String(run.checkpoint.completedGenerations)],
+      [
+        "Rekord",
+        run.checkpoint.bestRecord
+          ? `${formatDistance(run.checkpoint.bestRecord.result.maxDistance)} (G${run.checkpoint.bestRecord.generation})`
+          : "—"
+      ],
+      ["Data zapisu", new Date(run.updatedAt).toLocaleTimeString("pl-PL")]
+    ];
+
+    for (const [key, val] of metaItems) {
+      const dt = document.createElement("dt");
+      dt.textContent = key;
+      const dd = document.createElement("dd");
+      dd.textContent = val;
+      dl.append(dt, dd);
+    }
+
+    // Actions
+    const actions = document.createElement("div");
+    actions.className = "run-card-actions";
+
+    // Resume button
+    const resumeBtn = document.createElement("button");
+    resumeBtn.className = "button button-primary run-card-resume-btn";
+    resumeBtn.type = "button";
+    resumeBtn.textContent = "Wznów";
+    const isRunning =
+      currentState.status === "running" ||
+      currentState.status === "paused" ||
+      currentState.status === "replay";
+    resumeBtn.disabled = isRunning;
+    resumeBtn.addEventListener("click", () => resumeRun(run));
+
+    // Rename button
+    const renameBtn = document.createElement("button");
+    renameBtn.className = "button";
+    renameBtn.type = "button";
+    renameBtn.textContent = "Zmień nazwę";
+    renameBtn.addEventListener("click", async () => {
+      const newName = prompt("Podaj nową nazwę przebiegu:", run.name);
+      if (newName && newName.trim()) {
+        const trimmed = newName.trim();
+        await storage.renameRun(run.id, trimmed);
+        if (activeRunName && run.id === currentState.runId) {
+          activeRunName = trimmed;
+        }
+        await refreshSavedRunsList();
+      }
+    });
+
+    // Fork / New with same settings button
+    const forkBtn = document.createElement("button");
+    forkBtn.className = "button run-card-fork-btn";
+    forkBtn.type = "button";
+    forkBtn.textContent = "Nowy z tymi ustawieniami";
+    forkBtn.disabled = isRunning;
+    forkBtn.addEventListener("click", () => {
+      populateFormConfig(run.checkpoint.config);
+      form.scrollIntoView({ behavior: "smooth" });
+    });
+
+    // Export button
+    const exportBtn = document.createElement("button");
+    exportBtn.className = "button";
+    exportBtn.type = "button";
+    exportBtn.textContent = "Eksportuj";
+    exportBtn.addEventListener("click", () => {
+      const json = exportRunToJson(run);
+      downloadJson(json, `${run.name.replace(/\s+/g, "_")}.json`);
+    });
+
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "button button-danger";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Usuń";
+    deleteBtn.addEventListener("click", async () => {
+      if (confirm(`Czy na pewno chcesz usunąć zapis "${run.name}"?`)) {
+        deletedRunIds.add(run.id);
+        await storage.deleteRun(run.id);
+        selectedRunIdsForComparison.delete(run.id);
+        await refreshSavedRunsList();
+      }
+    });
+
+    actions.append(resumeBtn, renameBtn, forkBtn, exportBtn, deleteBtn);
+
+    card.append(header, dl, actions);
+    savedRunsGrid.append(card);
+  }
+}
+
+function updateCompareButton(): void {
+  const count = selectedRunIdsForComparison.size;
+  compareBtn.textContent = `Porównaj (${count})`;
+  compareBtn.disabled = count < 2;
+}
+
+async function resumeRun(run: SavedRun): Promise<void> {
+  const isRunning =
+    currentState.status === "running" ||
+    currentState.status === "paused" ||
+    currentState.status === "replay";
+  if (isRunning) {
+    return;
+  }
+
+  replay.cancel();
+  formError.textContent = "";
+  populateFormConfig(run.checkpoint.config);
+  activeRunName = run.name;
+
+  try {
+    saveStatusText.textContent = `Zapisano po pokoleniu ${run.checkpoint.completedGenerations}`;
+    await storage.setLastActiveRunId(run.id);
+    await controller.resumeCheckpoint(run.id, run.checkpoint);
+  } catch (error) {
+    formError.textContent =
+      error instanceof Error ? error.message : "Nie udało się wznowić przebiegu.";
+  }
+}
+
+function populateFormConfig(config: RunConfig): void {
+  seedInput.value = config.seed;
+  terrainProfileSelect.value = config.terrainProfile;
+  difficultyInput.value = String(config.difficulty);
+  populationInput.value = String(config.populationSize);
+  elitesInput.max = String(config.populationSize - 1);
+  elitesInput.value = String(config.eliteCount);
+  mutationRateInput.value = String(Math.round(config.mutationRate * 100));
+  mutationStrengthInput.value = String(Math.round(config.mutationStrength * 100));
+  updateRangeOutputs();
+}
+
+function formatDateName(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `Przebieg ${yyyy}-${mm}-${dd} ${hh}:${min}`;
+}
+
+function downloadJson(content: string, filename: string): void {
+  const blob = new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 function updateInterface(state: RunViewState): void {
   const active =
@@ -161,10 +553,31 @@ function updateInterface(state: RunViewState): void {
   configFields.disabled = active;
   randomSeedButton.disabled = active;
   startButton.disabled = active;
+  resumeLastRunButton.disabled = active || !savedRunsCache.length;
   startButton.querySelector("span")!.textContent =
     state.status === "stopped" || state.status === "error"
       ? "Uruchom nowy przebieg"
       : "Uruchom przebieg";
+  randomSeedButton.disabled = active;
+  startButton.disabled = active;
+  startButton.querySelector("span")!.textContent =
+    state.status === "stopped" || state.status === "error"
+      ? "Uruchom nowy przebieg"
+      : "Uruchom przebieg";
+
+  // Update saved run cards action buttons dynamically on status change
+  const cardResumeButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
+    ".run-card-resume-btn"
+  );
+  for (const btn of cardResumeButtons) {
+    btn.disabled = active;
+  }
+  const cardForkButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
+    ".run-card-fork-btn"
+  );
+  for (const btn of cardForkButtons) {
+    btn.disabled = active;
+  }
 
   status.dataset.status = state.status;
   statusText.textContent = statusLabel(state);

@@ -21,6 +21,7 @@ import {
 import type { SimulationPort } from "../simulation/simulation-port";
 import { RunLog } from "./run-log";
 import { TrialEvaluation } from "./trial-evaluation";
+import type { RunCheckpoint } from "../storage/indexed-db";
 
 export type RunStatus =
   | "idle"
@@ -31,6 +32,7 @@ export type RunStatus =
   | "error";
 
 export interface RunViewState {
+  runId: string | null;
   status: RunStatus;
   mode: RunMode;
   manifest: RunManifest | null;
@@ -75,10 +77,21 @@ export class RunController {
   private replayReturnStatus: Exclude<RunStatus, "replay" | "error" | "idle"> | null =
     null;
 
+  private onCheckpoint?: (runId: string, checkpoint: RunCheckpoint) => Promise<void>;
+
   constructor(
     private readonly simulation: SimulationPort,
-    private readonly scheduler: RunScheduler = browserScheduler
-  ) {}
+    private readonly scheduler: RunScheduler = browserScheduler,
+    options?: {
+      onCheckpoint?: (runId: string, checkpoint: RunCheckpoint) => Promise<void>;
+    }
+  ) {
+    this.onCheckpoint = options?.onCheckpoint;
+  }
+
+  setCheckpointHandler(handler: (runId: string, checkpoint: RunCheckpoint) => Promise<void>): void {
+    this.onCheckpoint = handler;
+  }
 
   subscribe(listener: StateListener): () => void {
     this.listeners.add(listener);
@@ -90,7 +103,7 @@ export class RunController {
     return this.state;
   }
 
-  async start(config: RunConfig): Promise<void> {
+  async start(config: RunConfig, runId: string = crypto.randomUUID()): Promise<void> {
     const issues = validateRunConfig(config);
     if (issues.length > 0) {
       throw new Error(issues.join(" "));
@@ -109,11 +122,12 @@ export class RunController {
     );
     const manifest = createManifest(frozenConfig);
     const log = new RunLog();
-    let population = createInitialPopulation(frozenConfig);
-    let generation = 1;
+    const population = createInitialPopulation(frozenConfig);
+    const generation = 1;
 
     this.state = {
       ...initialState(),
+      runId,
       status: "running",
       mode: this.state.mode,
       manifest,
@@ -124,6 +138,83 @@ export class RunController {
       message: "Pierwsze pokolenie ruszyło"
     };
     this.emit();
+
+    if (this.onCheckpoint) {
+      await this.onCheckpoint(runId, {
+        completedGenerations: 0,
+        nextPopulation: population,
+        history: [...log.getSummaries()],
+        samplingStride: log.getSamplingStride(),
+        bestRecord: log.getBestRecord(),
+        config: frozenConfig,
+        manifest,
+        updatedAt: Date.now()
+      });
+    }
+
+    await this.runLoop(runId, frozenConfig, terrain, manifest, log, population, generation, currentToken);
+  }
+
+  async resumeCheckpoint(
+    runId: string,
+    checkpoint: RunCheckpoint
+  ): Promise<void> {
+    const issues = validateRunConfig(checkpoint.config);
+    if (issues.length > 0) {
+      throw new Error(issues.join(" "));
+    }
+
+    const currentToken = ++this.token;
+    this.stopRequested = false;
+    this.paused = false;
+    this.replayReturnStatus = null;
+
+    const frozenConfig = Object.freeze({ ...checkpoint.config });
+    const terrain = createTerrain(
+      frozenConfig.seed,
+      frozenConfig.terrainProfile,
+      frozenConfig.difficulty
+    );
+    const manifest = checkpoint.manifest;
+    const log = new RunLog();
+    log.restore(checkpoint.history, checkpoint.samplingStride, checkpoint.bestRecord);
+
+    const generation = checkpoint.completedGenerations + 1;
+    const population = checkpoint.nextPopulation;
+
+    this.state = {
+      ...initialState(),
+      runId,
+      status: "running",
+      mode: this.state.mode,
+      manifest,
+      terrain,
+      generation,
+      completedGenerations: checkpoint.completedGenerations,
+      populationSize: frozenConfig.populationSize,
+      remainingTrials: population.length,
+      history: log.getSummaries(),
+      bestRecord: log.getBestRecord(),
+      overallBest: log.getBestRecord()?.result.maxDistance ?? 0,
+      message: `Pokolenie ${generation} ruszyło`
+    };
+    this.emit();
+
+    await this.runLoop(runId, frozenConfig, terrain, manifest, log, population, generation, currentToken);
+  }
+
+  private async runLoop(
+    runId: string,
+    frozenConfig: RunConfig,
+    terrain: Terrain,
+    manifest: RunManifest,
+    log: RunLog,
+    initialPop: Genome[],
+    initialGen: number,
+    currentToken: number
+  ): Promise<void> {
+    let population = initialPop;
+    let generation = initialGen;
 
     try {
       while (!this.stopRequested && currentToken === this.token) {
@@ -150,8 +241,23 @@ export class RunController {
         };
         this.emit();
 
-        population = createNextPopulation(results, frozenConfig, generation + 1);
+        const nextPopulation = createNextPopulation(results, frozenConfig, generation + 1);
+
+        if (this.onCheckpoint && currentToken === this.token && !this.stopRequested) {
+          await this.onCheckpoint(runId, {
+            completedGenerations: generation,
+            nextPopulation,
+            history: [...log.getSummaries()],
+            samplingStride: log.getSamplingStride(),
+            bestRecord: log.getBestRecord(),
+            config: frozenConfig,
+            manifest,
+            updatedAt: Date.now()
+          });
+        }
+
         generation += 1;
+        population = nextPopulation;
         this.state = {
           ...this.state,
           generation,
@@ -411,6 +517,7 @@ export const browserScheduler: RunScheduler = {
 
 function initialState(): RunViewState {
   return {
+    runId: null,
     status: "idle",
     mode: "normal",
     manifest: null,
