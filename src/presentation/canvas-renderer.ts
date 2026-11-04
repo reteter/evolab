@@ -294,14 +294,18 @@ export class CanvasRenderer {
     const phenotype = buildPhenotype(genome);
     const scale = this.scale();
 
-    for (const [index, anchor] of [phenotype.rearAnchor, phenotype.frontAnchor].entries()) {
+    for (let index = 0; index < phenotype.wheels.length; index += 1) {
+      const wheelPheno = phenotype.wheels[index]!;
+      const wheelPose = snapshot.wheels[index];
+      if (!wheelPose) continue;
+
+      const anchor = wheelPheno.anchor;
       const cosine = Math.cos(snapshot.chassis.angle);
       const sine = Math.sin(snapshot.chassis.angle);
       const x = this.screenX(snapshot.chassis.x + anchor.x * cosine - anchor.y * sine);
       const y = this.screenY(snapshot.chassis.y + anchor.x * sine + anchor.y * cosine);
-      const wheel = snapshot.wheels[index]!;
-      const dx = this.screenX(wheel.x) - x;
-      const dy = this.screenY(wheel.y) - y;
+      const dx = this.screenX(wheelPose.x) - x;
+      const dy = this.screenY(wheelPose.y) - y;
       const length = Math.hypot(dx, dy) || 1;
       this.context.save();
       this.context.strokeStyle = "#d9e8db";
@@ -342,12 +346,16 @@ export class CanvasRenderer {
     this.context.stroke();
 
     this.context.shadowBlur = 0;
-    this.context.strokeStyle = "rgba(12, 37, 37, 0.48)";
-    this.context.lineWidth = 1.4;
-    this.context.beginPath();
-    this.context.moveTo(phenotype.rearAnchor.x * scale, -phenotype.rearAnchor.y * scale);
-    this.context.lineTo(phenotype.frontAnchor.x * scale, -phenotype.frontAnchor.y * scale);
-    this.context.stroke();
+    if (phenotype.wheels.length >= 2) {
+      this.context.strokeStyle = "rgba(12, 37, 37, 0.48)";
+      this.context.lineWidth = 1.4;
+      this.context.beginPath();
+      const firstAnchor = phenotype.wheels[0]!.anchor;
+      const lastAnchor = phenotype.wheels[phenotype.wheels.length - 1]!.anchor;
+      this.context.moveTo(firstAnchor.x * scale, -firstAnchor.y * scale);
+      this.context.lineTo(lastAnchor.x * scale, -lastAnchor.y * scale);
+      this.context.stroke();
+    }
 
     this.context.beginPath();
     this.context.arc(
@@ -362,16 +370,15 @@ export class CanvasRenderer {
     this.context.stroke();
     this.context.restore();
 
-    this.drawWheel(
-      snapshot.wheels[0],
-      phenotype.rearWheelRadius,
-      phenotype.hue
-    );
-    this.drawWheel(
-      snapshot.wheels[1],
-      phenotype.frontWheelRadius,
-      phenotype.hue
-    );
+    for (let index = 0; index < snapshot.wheels.length; index += 1) {
+      const wheelPose = snapshot.wheels[index]!;
+      const wheelRadius = phenotype.wheels[index]?.radius ?? 0.5;
+      this.drawWheel(
+        wheelPose,
+        wheelRadius,
+        phenotype.hue
+      );
+    }
 
     this.context.save();
     this.context.font = "700 11px ui-monospace, monospace";

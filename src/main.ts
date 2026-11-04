@@ -1,10 +1,11 @@
 import "./styles.css";
 import {
+  BODY_GENE_RANGES,
   DEFAULT_RUN_CONFIG,
-  GENE_RANGES,
+  getWheelSlotGeneRanges,
   validateRunConfig
 } from "./domain/evolution";
-import type { Genome, RunConfig, RunMode, TerrainProfile } from "./domain/types";
+import type { Genome, RunConfig, RunMode, TerrainProfile, WheelCountMode } from "./domain/types";
 import { CanvasRenderer } from "./presentation/canvas-renderer";
 import { ReplayPlayer } from "./presentation/replay-player";
 import { TrendChart } from "./presentation/trend-chart";
@@ -21,6 +22,7 @@ import { exportRunToJson, importRunFromJson } from "./storage/export-import";
 const form = required<HTMLFormElement>("#run-form");
 const configFields = required<HTMLFieldSetElement>("#config-fields");
 const seedInput = required<HTMLInputElement>("#seed");
+const wheelCountModeSelect = required<HTMLSelectElement>("#wheel-count-mode");
 const terrainProfileSelect = required<HTMLSelectElement>("#terrain-profile");
 const difficultyInput = required<HTMLInputElement>("#difficulty");
 const difficultyOutput = required<HTMLOutputElement>("#difficulty-output");
@@ -61,6 +63,7 @@ const runSummary = required<HTMLElement>("#run-summary");
 const summaryResult = required<HTMLElement>("#summary-result");
 const summaryDetail = required<HTMLElement>("#summary-detail");
 const canvas = required<HTMLCanvasElement>("#simulation-canvas");
+const genomeDetailsSummary = required<HTMLElement>("#genome-details-summary");
 const genomeValues = required<HTMLElement>("#genome-values");
 const saveStatusText = required<HTMLElement>("#save-status-text");
 const resumeLastRunButton = required<HTMLButtonElement>("#resume-last-run");
@@ -289,7 +292,6 @@ async function refreshSavedRunsList(): Promise<void> {
     }
   }
 
-  // Prune comparison selection if run was deleted
   for (const id of Array.from(selectedRunIdsForComparison)) {
     if (!savedRunsCache.some((r) => r.id === id)) {
       selectedRunIdsForComparison.delete(id);
@@ -311,7 +313,6 @@ function renderSavedRunsGrid(): void {
     return;
   }
 
-  // Determine criteria of first selected run if any
   const firstSelectedRun = savedRunsCache.find((r) =>
     selectedRunIdsForComparison.has(r.id)
   );
@@ -320,7 +321,6 @@ function renderSavedRunsGrid(): void {
     const card = document.createElement("div");
     card.className = "run-card";
 
-    // Card Header
     const header = document.createElement("div");
     header.className = "run-card-header";
 
@@ -328,7 +328,6 @@ function renderSavedRunsGrid(): void {
     title.className = "run-card-title";
     title.textContent = run.name;
 
-    // Checkbox for comparison
     const selectLabel = document.createElement("label");
     selectLabel.className = "run-card-select";
 
@@ -375,7 +374,6 @@ function renderSavedRunsGrid(): void {
     selectLabel.append(checkbox, checkText);
     header.append(title, selectLabel);
 
-    // Meta details
     const dl = document.createElement("dl");
     dl.className = "run-card-meta";
 
@@ -385,8 +383,15 @@ function renderSavedRunsGrid(): void {
       bumpy: "Wyboisty"
     };
 
+    const wheelModeLabels: Record<WheelCountMode, string> = {
+      "2": "Tylko 2 koła",
+      "2-3": "2–3 koła",
+      "2-4": "2–4 koła"
+    };
+
     const metaItems: [string, string][] = [
       ["Seed", run.checkpoint.config.seed],
+      ["Liczba kół", wheelModeLabels[run.checkpoint.config.wheelCountMode ?? "2"]],
       ["Profil terenu", profileLabels[run.checkpoint.config.terrainProfile]],
       ["Trudność", `${run.checkpoint.config.difficulty}/5`],
       ["Ukończone pokolenia", String(run.checkpoint.completedGenerations)],
@@ -407,11 +412,9 @@ function renderSavedRunsGrid(): void {
       dl.append(dt, dd);
     }
 
-    // Actions
     const actions = document.createElement("div");
     actions.className = "run-card-actions";
 
-    // Resume button
     const resumeBtn = document.createElement("button");
     resumeBtn.className = "button button-primary run-card-resume-btn";
     resumeBtn.type = "button";
@@ -423,7 +426,6 @@ function renderSavedRunsGrid(): void {
     resumeBtn.disabled = isRunning;
     resumeBtn.addEventListener("click", () => resumeRun(run));
 
-    // Rename button
     const renameBtn = document.createElement("button");
     renameBtn.className = "button";
     renameBtn.type = "button";
@@ -440,7 +442,6 @@ function renderSavedRunsGrid(): void {
       }
     });
 
-    // Fork / New with same settings button
     const forkBtn = document.createElement("button");
     forkBtn.className = "button run-card-fork-btn";
     forkBtn.type = "button";
@@ -451,7 +452,6 @@ function renderSavedRunsGrid(): void {
       form.scrollIntoView({ behavior: "smooth" });
     });
 
-    // Export button
     const exportBtn = document.createElement("button");
     exportBtn.className = "button";
     exportBtn.type = "button";
@@ -461,7 +461,6 @@ function renderSavedRunsGrid(): void {
       downloadJson(json, `${run.name.replace(/\s+/g, "_")}.json`);
     });
 
-    // Delete button
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "button button-danger";
     deleteBtn.type = "button";
@@ -514,6 +513,7 @@ async function resumeRun(run: SavedRun): Promise<void> {
 
 function populateFormConfig(config: RunConfig): void {
   seedInput.value = config.seed;
+  wheelCountModeSelect.value = config.wheelCountMode ?? "2-4";
   terrainProfileSelect.value = config.terrainProfile;
   difficultyInput.value = String(config.difficulty);
   populationInput.value = String(config.populationSize);
@@ -565,7 +565,6 @@ function updateInterface(state: RunViewState): void {
       ? "Uruchom nowy przebieg"
       : "Uruchom przebieg";
 
-  // Update saved run cards action buttons dynamically on status change
   const cardResumeButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
     ".run-card-resume-btn"
   );
@@ -685,15 +684,35 @@ function showGenome(genome: Genome | null): void {
     return;
   }
   inspectedGenome = genome;
-  genomeValues.replaceChildren(...(genome === null ? [] : GENE_RANGES.map(({ key, label }) => {
-    const row = document.createElement("div");
-    const name = document.createElement("dt");
-    const value = document.createElement("dd");
-    name.textContent = label;
-    value.textContent = genome.genes[key].toLocaleString("pl-PL", { maximumFractionDigits: 2 });
-    row.append(name, value);
-    return row;
-  })));
+  if (genome === null) {
+    genomeDetailsSummary.textContent = "Geny obserwowanego pojazdu";
+    genomeValues.replaceChildren();
+    return;
+  }
+
+  const activeWheels = Math.min(4, Math.max(2, genome.genes.wheelCount || 2));
+  const activeRanges = [
+    ...BODY_GENE_RANGES
+  ];
+
+  for (let slot = 0; slot < activeWheels; slot += 1) {
+    activeRanges.push(...getWheelSlotGeneRanges(slot));
+  }
+
+  genomeDetailsSummary.textContent = `Geny obserwowanego pojazdu · ${activeWheels} koła (${activeRanges.length} cech)`;
+
+  genomeValues.replaceChildren(
+    ...activeRanges.map(({ key, label }) => {
+      const row = document.createElement("div");
+      const name = document.createElement("dt");
+      const value = document.createElement("dd");
+      name.textContent = label;
+      const rawVal = genome.genes[key];
+      value.textContent = typeof rawVal === "number" ? rawVal.toLocaleString("pl-PL", { maximumFractionDigits: 2 }) : "—";
+      row.append(name, value);
+      return row;
+    })
+  );
 }
 
 function togglePause(): void {
@@ -740,7 +759,8 @@ function readConfig(): RunConfig {
     mutationStrength: Number(mutationStrengthInput.value) / 100,
     eliteCount: Number(elitesInput.value),
     terrainProfile: terrainProfileSelect.value as TerrainProfile,
-    difficulty: Number(difficultyInput.value)
+    difficulty: Number(difficultyInput.value),
+    wheelCountMode: wheelCountModeSelect.value as WheelCountMode
   };
 }
 

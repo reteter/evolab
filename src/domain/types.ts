@@ -1,4 +1,4 @@
-export const APP_BUILD_ID = "0.2.0";
+export const APP_BUILD_ID = "0.3.0";
 export const CONCURRENT_TRIALS = 4;
 export const FIXED_DELTA_SECONDS = 1 / 60;
 export const MAX_TRIAL_STEPS = 1_200;
@@ -9,6 +9,8 @@ export type RunMode = "normal" | "fast" | "headless";
 
 export type TerrainProfile = "smooth" | "steep-hills" | "bumpy";
 
+export type WheelCountMode = "2" | "2-3" | "2-4";
+
 export interface RunConfig {
   seed: string;
   populationSize: number;
@@ -17,6 +19,7 @@ export interface RunConfig {
   eliteCount: number;
   terrainProfile: TerrainProfile;
   difficulty: number;
+  wheelCountMode: WheelCountMode;
 }
 
 export interface RunManifest {
@@ -25,7 +28,7 @@ export interface RunManifest {
   physics: "planck@1.5.0";
   rng: "mulberry32-fnv1a@1";
   world: "terrain-profiles@1";
-  evolution: "rank-uniform-triangular@2";
+  evolution: "rank-uniform-triangular@3";
   fixedDeltaSeconds: number;
   maxTrialSteps: number;
   stagnationSteps: number;
@@ -34,34 +37,69 @@ export interface RunManifest {
 }
 
 export interface VehicleGenes {
+  // Nadwozie i balast
   width: number;
   height: number;
   roofScale: number;
   noseScale: number;
   tailScale: number;
   floorTilt: number;
-  rearInset: number;
-  frontInset: number;
-  rearWheelRadius: number;
-  frontWheelRadius: number;
-  motorSpeed: number;
-  motorTorque: number;
   roofOffset: number;
   chassisDensity: number;
-  rearWheelDensity: number;
-  frontWheelDensity: number;
-  rearWheelGrip: number;
-  frontWheelGrip: number;
-  rearRideHeight: number;
-  frontRideHeight: number;
-  rearSpringFrequency: number;
-  frontSpringFrequency: number;
-  rearSpringDamping: number;
-  frontSpringDamping: number;
-  driveBalance: number;
-  frontSpeedRatio: number;
   ballastMass: number;
   ballastOffset: number;
+  motorSpeed: number;
+  motorTorque: number;
+
+  // Aktywna liczba kół
+  wheelCount: number;
+
+  // Flaga zachowania dawnych wysokości mocowań dla zmigrowanych pojazdów v1 (1 dla starych, 0 dla nowych)
+  legacyAnchors: number;
+
+  // Slot 0
+  wheel0Radius: number;
+  wheel0MountX: number;
+  wheel0Density: number;
+  wheel0Grip: number;
+  wheel0RideHeight: number;
+  wheel0SpringFrequency: number;
+  wheel0SpringDamping: number;
+  wheel0DriveShare: number;
+  wheel0SpeedRatio: number;
+
+  // Slot 1
+  wheel1Radius: number;
+  wheel1MountX: number;
+  wheel1Density: number;
+  wheel1Grip: number;
+  wheel1RideHeight: number;
+  wheel1SpringFrequency: number;
+  wheel1SpringDamping: number;
+  wheel1DriveShare: number;
+  wheel1SpeedRatio: number;
+
+  // Slot 2
+  wheel2Radius: number;
+  wheel2MountX: number;
+  wheel2Density: number;
+  wheel2Grip: number;
+  wheel2RideHeight: number;
+  wheel2SpringFrequency: number;
+  wheel2SpringDamping: number;
+  wheel2DriveShare: number;
+  wheel2SpeedRatio: number;
+
+  // Slot 3
+  wheel3Radius: number;
+  wheel3MountX: number;
+  wheel3Density: number;
+  wheel3Grip: number;
+  wheel3RideHeight: number;
+  wheel3SpringFrequency: number;
+  wheel3SpringDamping: number;
+  wheel3DriveShare: number;
+  wheel3SpeedRatio: number;
 }
 
 export type VehicleGeneKey = keyof VehicleGenes;
@@ -101,7 +139,7 @@ export interface Pose {
 export interface TrialSnapshot {
   tick: number;
   chassis: Pose;
-  wheels: [Pose, Pose];
+  wheels: Pose[];
   finite: boolean;
 }
 
@@ -146,7 +184,7 @@ export function createManifest(config: RunConfig): RunManifest {
     physics: "planck@1.5.0",
     rng: "mulberry32-fnv1a@1",
     world: "terrain-profiles@1",
-    evolution: "rank-uniform-triangular@2",
+    evolution: "rank-uniform-triangular@3",
     fixedDeltaSeconds: FIXED_DELTA_SECONDS,
     maxTrialSteps: MAX_TRIAL_STEPS,
     stagnationSteps: STAGNATION_STEPS,

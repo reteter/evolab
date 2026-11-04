@@ -26,8 +26,7 @@ export class PlanckSimulationAdapter implements SimulationPort {
 class PlanckTrialWorld implements TrialWorld {
   private readonly world: World;
   private readonly chassis: Body;
-  private readonly rearWheel: Body;
-  private readonly frontWheel: Body;
+  private readonly wheels: Body[] = [];
   private tick = 0;
   private disposed = false;
 
@@ -41,10 +40,10 @@ class PlanckTrialWorld implements TrialWorld {
 
     const phenotype = buildPhenotype(genome);
     const genes = genome.genes;
-    const underbodyClearance = Math.max(
-      -phenotype.rearWheelCenter.y + phenotype.rearWheelRadius,
-      -phenotype.frontWheelCenter.y + phenotype.frontWheelRadius
-    );
+
+    const underbodyClearance = phenotype.wheels.reduce((max, w) => {
+      return Math.max(max, -w.center.y + w.radius);
+    }, 0);
     const startY = terrain.startY + underbodyClearance + 0.32;
 
     this.chassis = this.world.createBody({
@@ -72,37 +71,25 @@ class PlanckTrialWorld implements TrialWorld {
       }
     );
 
-    this.rearWheel = this.createWheel(
-      phenotype.rearWheelCenter.x,
-      startY + phenotype.rearWheelCenter.y,
-      phenotype.rearWheelRadius,
-      genes.rearWheelDensity,
-      genes.rearWheelGrip
-    );
-    this.frontWheel = this.createWheel(
-      phenotype.frontWheelCenter.x,
-      startY + phenotype.frontWheelCenter.y,
-      phenotype.frontWheelRadius,
-      genes.frontWheelDensity,
-      genes.frontWheelGrip
-    );
+    for (const wheelPheno of phenotype.wheels) {
+      const wheelBody = this.createWheel(
+        wheelPheno.center.x,
+        startY + wheelPheno.center.y,
+        wheelPheno.radius,
+        wheelPheno.density,
+        wheelPheno.grip
+      );
+      this.wheels.push(wheelBody);
 
-    this.createMotor(
-      phenotype.rearWheelCenter,
-      this.rearWheel,
-      phenotype.motorSpeed,
-      phenotype.motorTorque * 2 * (1 - genes.driveBalance),
-      genes.rearSpringFrequency,
-      genes.rearSpringDamping
-    );
-    this.createMotor(
-      phenotype.frontWheelCenter,
-      this.frontWheel,
-      phenotype.motorSpeed * genes.frontSpeedRatio,
-      phenotype.motorTorque * 2 * genes.driveBalance,
-      genes.frontSpringFrequency,
-      genes.frontSpringDamping
-    );
+      this.createMotor(
+        wheelPheno.center,
+        wheelBody,
+        wheelPheno.speed,
+        wheelPheno.torque,
+        wheelPheno.springFrequency,
+        wheelPheno.springDamping
+      );
+    }
   }
 
   step(fixedDeltaSeconds: number): TrialSnapshot {
@@ -116,13 +103,12 @@ class PlanckTrialWorld implements TrialWorld {
 
   snapshot(): TrialSnapshot {
     const chassis = bodyPose(this.chassis);
-    const rearWheel = bodyPose(this.rearWheel);
-    const frontWheel = bodyPose(this.frontWheel);
+    const wheelPoses = this.wheels.map(bodyPose);
     return {
       tick: this.tick,
       chassis,
-      wheels: [rearWheel, frontWheel],
-      finite: posesAreFinite([chassis, rearWheel, frontWheel])
+      wheels: wheelPoses,
+      finite: posesAreFinite([chassis, ...wheelPoses])
     };
   }
 
@@ -131,8 +117,9 @@ class PlanckTrialWorld implements TrialWorld {
       return;
     }
     this.disposed = true;
-    this.world.destroyBody(this.rearWheel);
-    this.world.destroyBody(this.frontWheel);
+    for (const wheel of this.wheels) {
+      this.world.destroyBody(wheel);
+    }
     this.world.destroyBody(this.chassis);
   }
 

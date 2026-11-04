@@ -80,7 +80,7 @@ function cloneTrialResult(result: TrialResult): TrialResult {
     trace: result.trace.map((frame) => ({
       ...frame,
       chassis: { ...frame.chassis },
-      wheels: [{ ...frame.wheels[0] }, { ...frame.wheels[1] }]
+      wheels: frame.wheels.map((w) => ({ ...w }))
     }))
   };
 }

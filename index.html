@@ -63,6 +63,16 @@
                 </span>
               </label>
 
+              <label class="field" for="wheel-count-mode">
+                <span>Liczba kół</span>
+                <span class="field-hint">dozwolona pula kół w przebiegu</span>
+                <select id="wheel-count-mode" name="wheelCountMode">
+                  <option value="2-4">2–4 koła</option>
+                  <option value="2-3">2–3 koła</option>
+                  <option value="2">Tylko 2 koła</option>
+                </select>
+              </label>
+
               <label class="field" for="terrain-profile">
                 <span>Profil terenu</span>
                 <span class="field-hint">charakter trasy dla wszystkich pokoleń</span>
@@ -167,7 +177,7 @@
             <p class="form-note">
               Ustawienia są zamrożone po starcie. Zmienisz je w nowym przebiegu.
             </p>
-            <p class="form-note">28 genów · 4 pojazdy oceniane jednocześnie</p>
+            <p class="form-note">Ewolucja wielokołowa · 4 pojazdy oceniane jednocześnie</p>
           </form>
 
           <div class="run-summary" id="run-summary" hidden>
@@ -256,7 +266,7 @@
             <kbd>3</kbd> tempo · <kbd>R</kbd> replay
           </p>
           <details class="genome-details">
-            <summary>Geny obserwowanego pojazdu · 28 cech</summary>
+            <summary id="genome-details-summary">Geny obserwowanego pojazdu</summary>
             <dl id="genome-values"></dl>
           </details>
         </section>

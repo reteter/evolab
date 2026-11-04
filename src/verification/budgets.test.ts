@@ -22,7 +22,8 @@ const BUDGET_CONFIG: RunConfig = {
   mutationStrength: 0.14,
   eliteCount: 1,
   terrainProfile: "smooth",
-  difficulty: 3
+  difficulty: 3,
+  wheelCountMode: "2"
 };
 
 describe("Budżety M1–M4 na środowisku właściciela", () => {
@@ -131,7 +132,7 @@ function evaluate(
     const snapshot = evaluation.advance();
     if (observe) {
       observationChecksum +=
-        snapshot.chassis.x + snapshot.chassis.y + snapshot.wheels[0].angle;
+        snapshot.chassis.x + snapshot.chassis.y + (snapshot.wheels[0]?.angle ?? 0);
     }
   }
   expect(Number.isFinite(observationChecksum)).toBe(true);
