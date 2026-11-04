@@ -96,6 +96,7 @@ let inspectedGenome: Genome | null = null;
 let savedRunsCache: SavedRun[] = [];
 let selectedRunIdsForComparison = new Set<string>();
 let activeRunName: string | null = null;
+const deletedRunIds = new Set<string>();
 
 const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
 renderer.setReducedMotion(motionPreference.matches);
@@ -104,9 +105,15 @@ motionPreference.addEventListener("change", ({ matches }) => {
 });
 
 controller.setCheckpointHandler(async (runId: string, checkpoint: RunCheckpoint) => {
+  if (deletedRunIds.has(runId)) {
+    return;
+  }
   saveStatusText.textContent = "Zapisywanie…";
   try {
     let run = await storage.getRun(runId);
+    if (deletedRunIds.has(runId)) {
+      return;
+    }
     if (!run) {
       const now = Date.now();
       const defaultName = activeRunName ?? formatDateName(new Date(now));
@@ -406,7 +413,7 @@ function renderSavedRunsGrid(): void {
 
     // Resume button
     const resumeBtn = document.createElement("button");
-    resumeBtn.className = "button button-primary";
+    resumeBtn.className = "button button-primary run-card-resume-btn";
     resumeBtn.type = "button";
     resumeBtn.textContent = "Wznów";
     const isRunning =
@@ -424,16 +431,18 @@ function renderSavedRunsGrid(): void {
     renameBtn.addEventListener("click", async () => {
       const newName = prompt("Podaj nową nazwę przebiegu:", run.name);
       if (newName && newName.trim()) {
-        run.name = newName.trim();
-        run.updatedAt = Date.now();
-        await storage.saveRun(run);
+        const trimmed = newName.trim();
+        await storage.renameRun(run.id, trimmed);
+        if (activeRunName && run.id === currentState.runId) {
+          activeRunName = trimmed;
+        }
         await refreshSavedRunsList();
       }
     });
 
     // Fork / New with same settings button
     const forkBtn = document.createElement("button");
-    forkBtn.className = "button";
+    forkBtn.className = "button run-card-fork-btn";
     forkBtn.type = "button";
     forkBtn.textContent = "Nowy z tymi ustawieniami";
     forkBtn.disabled = isRunning;
@@ -459,6 +468,7 @@ function renderSavedRunsGrid(): void {
     deleteBtn.textContent = "Usuń";
     deleteBtn.addEventListener("click", async () => {
       if (confirm(`Czy na pewno chcesz usunąć zapis "${run.name}"?`)) {
+        deletedRunIds.add(run.id);
         await storage.deleteRun(run.id);
         selectedRunIdsForComparison.delete(run.id);
         await refreshSavedRunsList();
@@ -554,6 +564,20 @@ function updateInterface(state: RunViewState): void {
     state.status === "stopped" || state.status === "error"
       ? "Uruchom nowy przebieg"
       : "Uruchom przebieg";
+
+  // Update saved run cards action buttons dynamically on status change
+  const cardResumeButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
+    ".run-card-resume-btn"
+  );
+  for (const btn of cardResumeButtons) {
+    btn.disabled = active;
+  }
+  const cardForkButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
+    ".run-card-fork-btn"
+  );
+  for (const btn of cardForkButtons) {
+    btn.disabled = active;
+  }
 
   status.dataset.status = state.status;
   statusText.textContent = statusLabel(state);

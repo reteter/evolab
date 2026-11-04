@@ -30,6 +30,7 @@ export interface StoragePort {
   getRun(id: string): Promise<SavedRun | undefined>;
   listRuns(): Promise<SavedRun[]>;
   deleteRun(id: string): Promise<void>;
+  renameRun(id: string, newName: string): Promise<void>;
   getLastActiveRunId(): Promise<string | null>;
   setLastActiveRunId(id: string): Promise<void>;
 }
@@ -126,6 +127,27 @@ export class IndexedDbStorage implements StoragePort {
       lastReq.onsuccess = () => {
         if (lastReq.result === id) {
           metaStore.delete(LAST_ACTIVE_KEY);
+        }
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async renameRun(id: string, newName: string): Promise<void> {
+    const db = await this.getDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(RUNS_STORE, "readwrite");
+      const store = tx.objectStore(RUNS_STORE);
+      const getReq = store.get(id);
+
+      getReq.onsuccess = () => {
+        const record = getReq.result as SavedRun | undefined;
+        if (record) {
+          record.name = newName;
+          record.updatedAt = Date.now();
+          store.put(record);
         }
       };
 
