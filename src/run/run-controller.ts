@@ -19,8 +19,9 @@ import {
   type TrialSnapshot
 } from "../domain/types";
 import type { SimulationPort } from "../simulation/simulation-port";
+import type { SimulationExecutor } from "../simulation/simulation-executor";
+import { LocalSimulationExecutor } from "../simulation/local-simulation-executor";
 import { RunLog } from "./run-log";
-import { TrialEvaluation } from "./trial-evaluation";
 import type { RunCheckpoint } from "../storage/indexed-db";
 
 export type RunStatus =
@@ -78,14 +79,20 @@ export class RunController {
     null;
 
   private onCheckpoint?: (runId: string, checkpoint: RunCheckpoint) => Promise<void>;
+  private readonly executor: SimulationExecutor;
 
   constructor(
-    private readonly simulation: SimulationPort,
+    simulationOrExecutor: SimulationPort | SimulationExecutor,
     private readonly scheduler: RunScheduler = browserScheduler,
     options?: {
       onCheckpoint?: (runId: string, checkpoint: RunCheckpoint) => Promise<void>;
     }
   ) {
+    if ("evaluatePopulation" in simulationOrExecutor) {
+      this.executor = simulationOrExecutor;
+    } else {
+      this.executor = new LocalSimulationExecutor(simulationOrExecutor);
+    }
     this.onCheckpoint = options?.onCheckpoint;
   }
 
@@ -297,13 +304,14 @@ export class RunController {
     }
   }
 
-  pause(): void {
+  pause(): Promise<void> | void {
     if (this.state.status !== "running") {
       return;
     }
     this.paused = true;
     this.state = { ...this.state, status: "paused", message: "Pauza" };
     this.emit();
+    return this.executor.pause(this.token);
   }
 
   resume(): void {
@@ -311,6 +319,7 @@ export class RunController {
       return;
     }
     this.paused = false;
+    this.executor.resume(this.token);
     this.state = { ...this.state, status: "running", message: "Przebieg wznowiony" };
     this.emit();
   }
@@ -322,6 +331,7 @@ export class RunController {
     this.stopRequested = true;
     this.paused = false;
     this.replayReturnStatus = null;
+    this.executor.terminate();
     this.state = {
       ...this.state,
       status: "stopped",
@@ -343,6 +353,7 @@ export class RunController {
             ? "Przyspieszona obserwacja"
             : "Liczenie bez obrazu"
     };
+    this.executor.setMode(mode, this.token);
     this.emit();
   }
 
@@ -360,6 +371,7 @@ export class RunController {
     this.replayReturnStatus = this.state.status;
     if (this.state.status === "running") {
       this.paused = true;
+      void this.executor.pause(this.token);
     }
     this.state = {
       ...this.state,
@@ -379,6 +391,7 @@ export class RunController {
     this.replayReturnStatus = null;
     if (target === "running" && !this.stopRequested) {
       this.paused = false;
+      this.executor.resume(this.token);
       this.state = { ...this.state, status: "running", message: "Przebieg wznowiony" };
     } else if (target === "paused") {
       this.paused = true;
@@ -398,34 +411,33 @@ export class RunController {
     currentToken: number
   ): Promise<TrialResult[]> {
     const results: TrialResult[] = [];
-    const active: { genome: Genome; evaluation: TrialEvaluation }[] = [];
-    let nextIndex = 0;
+    const activeMap = new Map<string, LiveTrial>();
     let lastFinished: TrialResult | null = null;
-    let lastHeadlessEmit = this.scheduler.now();
+    let lastEmitTime = 0;
 
-    const fillSlots = () => {
-      while (active.length < CONCURRENT_TRIALS && nextIndex < population.length) {
-        const genome = population[nextIndex++]!;
-        active.push({
-          genome,
-          evaluation: new TrialEvaluation(
-            this.simulation.createTrial(genome, terrain), genome, terrain
-          )
-        });
+    const publish = (force = false) => {
+      if (currentToken !== this.token || this.stopRequested) return;
+
+      const now = this.scheduler.now();
+      const mode = this.state.mode;
+
+      if (!force) {
+        if (mode === "headless" && now - lastEmitTime < 200) {
+          return;
+        }
+        if (mode !== "headless" && now - lastEmitTime < 15) {
+          return;
+        }
       }
-    };
+      lastEmitTime = now;
 
-    const publish = () => {
-      const trials = active.map(({ genome, evaluation }) => ({
-        genome,
-        snapshot: evaluation.snapshot(),
-        distance: evaluation.distance
-      }));
+      const trials = Array.from(activeMap.values());
       const leader = trials.reduce<LiveTrial | null>(
-        (best, trial) => best === null || trial.distance > best.distance ? trial : best,
+        (best, trial) => (best === null || trial.distance > best.distance ? trial : best),
         null
       );
       const partial = summarizeGeneration(generation, results);
+
       this.state = {
         ...this.state,
         generation,
@@ -442,58 +454,40 @@ export class RunController {
         message: `${trials.length} na trasie · ${results.length}/${population.length} ocenionych`
       };
       this.emit();
-      lastHeadlessEmit = this.scheduler.now();
     };
 
-    try {
-      fillSlots();
-      publish();
-      while (results.length < population.length && !this.stopRequested && currentToken === this.token) {
-        if (this.paused || this.state.status === "replay") {
-          await this.scheduler.nextFrame();
-          continue;
-        }
-
-        const mode = this.state.mode;
-        const stepCount = mode === "normal" ? 1 : mode === "fast" ? 10 : 4_096;
-        const startedAt = this.scheduler.now();
-        let finished = false;
-        for (let step = 0; step < stepCount; step += 1) {
-          for (let index = active.length - 1; index >= 0; index -= 1) {
-            const trial = active[index]!;
-            trial.evaluation.advance();
-            if (trial.evaluation.done) {
-              const result = trial.evaluation.result();
-              results.push(result);
-              log.considerResult(generation, result);
-              lastFinished = result;
-              active.splice(index, 1);
-              finished = true;
-            }
-          }
-          fillSlots();
-          if (active.length === 0 || (mode === "headless" && this.scheduler.now() - startedAt >= 8)) {
-            break;
-          }
-        }
-
-        if (mode !== "headless" || finished || this.scheduler.now() - lastHeadlessEmit >= 40) {
-          publish();
-        }
-        if (active.length > 0) {
-          if (mode === "headless") {
-            await this.scheduler.nextTask();
-          } else {
-            await this.scheduler.nextFrame();
-          }
-        }
+    const observer = {
+      onSnapshot: (genome: Genome, snapshot: TrialSnapshot, distance: number) => {
+        if (currentToken !== this.token || this.stopRequested) return;
+        activeMap.set(genome.id, { genome, snapshot, distance });
+        publish();
+      },
+      onResult: (result: TrialResult) => {
+        if (currentToken !== this.token || this.stopRequested) return;
+        results.push(result);
+        log.considerResult(generation, result);
+        lastFinished = result;
+        activeMap.delete(result.genome.id);
+        publish(true);
       }
-    } finally {
-      for (const trial of active) {
-        trial.evaluation.dispose();
-      }
+    };
+
+    const finalResults = await this.executor.evaluatePopulation({
+      population,
+      terrain,
+      generation,
+      mode: this.state.mode,
+      runToken: currentToken,
+      observer,
+      shouldStop: () => this.stopRequested || currentToken !== this.token,
+      isPaused: () => this.paused || this.state.status === "replay"
+    });
+
+    if (currentToken !== this.token || this.stopRequested) {
+      return [];
     }
-    return results;
+
+    return finalResults;
   }
 
   private emit(): void {
