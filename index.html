@@ -175,6 +175,12 @@
             <strong id="summary-result">—</strong>
             <span id="summary-detail">—</span>
           </div>
+
+          <div class="quick-actions" id="quick-actions">
+            <button class="button button-resume-last" id="resume-last-run" type="button" disabled>
+              Wznów ostatni
+            </button>
+          </div>
         </aside>
 
         <section
@@ -239,6 +245,10 @@
             <button class="button button-danger" id="stop-run" type="button" disabled>
               Stop
             </button>
+          </div>
+
+          <div class="save-status-wrap" aria-live="polite">
+            <span class="save-status-indicator" id="save-status-text">Brak zapisu</span>
           </div>
 
           <p class="keyboard-hint">
@@ -328,6 +338,63 @@
               </table>
             </div>
           </details>
+        </section>
+
+        <!-- Sekcja: Zapisane przebiegi -->
+        <section class="panel saved-runs-panel" aria-labelledby="saved-runs-title">
+          <div class="panel-heading saved-runs-heading">
+            <div>
+              <p class="step-label">Pamięć lokalna</p>
+              <h2 id="saved-runs-title">Zapisane przebiegi</h2>
+            </div>
+            <div class="saved-runs-top-actions">
+              <input type="file" id="import-file-input" accept=".json" hidden />
+              <button class="button button-small" id="import-run-btn" type="button">
+                Importuj JSON
+              </button>
+              <button class="button button-small button-primary" id="compare-btn" type="button" disabled>
+                Porównaj (0)
+              </button>
+            </div>
+          </div>
+
+          <div class="saved-runs-grid" id="saved-runs-grid">
+            <p class="saved-runs-empty" id="saved-runs-empty">Brak zapisanych przebiegów w IndexedDB.</p>
+          </div>
+        </section>
+
+        <!-- Sekcja: Porównanie przebiegów -->
+        <section class="panel comparison-panel" id="comparison-section" aria-labelledby="comparison-title" hidden>
+          <div class="panel-heading comparison-heading">
+            <div>
+              <p class="step-label">Analiza wielu prób</p>
+              <h2 id="comparison-title">Porównanie przebiegów</h2>
+            </div>
+            <div class="comparison-legend" id="comparison-legend"></div>
+            <button class="button button-small" id="close-comparison-btn" type="button">
+              Zamknij porównanie
+            </button>
+          </div>
+
+          <p class="chart-description" id="comparison-description">
+            Wykres porównawczy.
+          </p>
+          <svg
+            id="comparison-chart"
+            class="trend-chart"
+            viewBox="0 0 900 280"
+            role="img"
+            aria-labelledby="comparison-title comparison-description"
+            preserveAspectRatio="none"
+          ></svg>
+
+          <div class="data-table-wrap">
+            <div class="table-scroll">
+              <table class="comparison-table">
+                <tbody id="comparison-table-body"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
       </main>
 
