@@ -15,6 +15,7 @@ let loopTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSnapshotTime = 0;
 let lastProgressTime = 0;
 let loopStartedAt = 0;
+let baseTick = 0;
 
 function postToMain(msg: WorkerOutMessage): void {
   self.postMessage(msg);
@@ -50,6 +51,7 @@ self.onmessage = (event: MessageEvent<WorkerInMessage>) => {
       lastSnapshotTime = performance.now();
       lastProgressTime = performance.now();
       loopStartedAt = performance.now();
+      baseTick = 0;
 
       // Wyślij stan początkowy (snapshot)
       postToMain({
@@ -68,8 +70,9 @@ self.onmessage = (event: MessageEvent<WorkerInMessage>) => {
     case "set-mode": {
       if (data.runToken === currentRunToken) {
         currentMode = data.mode;
-        // Zresetuj licznik czasu, aby odpowiednio dawkować kroki w nowym trybie
+        // Zresetuj licznik czasu i zapamiętaj bieżący tick jako bazę dla nowego trybu
         loopStartedAt = performance.now();
+        baseTick = currentEvaluation ? currentEvaluation.snapshot().tick : 0;
       }
       break;
     }
@@ -91,6 +94,7 @@ self.onmessage = (event: MessageEvent<WorkerInMessage>) => {
         if (isPaused) {
           isPaused = false;
           loopStartedAt = performance.now();
+          baseTick = currentEvaluation ? currentEvaluation.snapshot().tick : 0;
           scheduleLoop(0);
         }
       }
@@ -135,16 +139,16 @@ function runPhysicsChunk(): void {
 
   if (currentMode === "normal") {
     // normal: około 60 kroków fizyki/s (~16.6ms na krok)
-    // Obliczamy ile kroków fizyki powinno upłynąć od startu
+    // Obliczamy ile kroków fizyki powinno upłynąć od startu/wznowienia bazując na baseTick
     const elapsed = now - loopStartedAt;
-    const targetSteps = Math.floor((elapsed * 60) / 1000);
+    const targetSteps = baseTick + Math.floor((elapsed * 60) / 1000);
     const currentTick = currentEvaluation.snapshot().tick;
     stepsToRun = Math.max(1, Math.min( targetSteps - currentTick, 5 ));
     nextDelay = 16;
   } else if (currentMode === "fast") {
     // fast: około 600 kroków fizyki/s (~10 kroków na 16.6ms)
     const elapsed = now - loopStartedAt;
-    const targetSteps = Math.floor((elapsed * 600) / 1000);
+    const targetSteps = baseTick + Math.floor((elapsed * 600) / 1000);
     const currentTick = currentEvaluation.snapshot().tick;
     stepsToRun = Math.max(1, Math.min( targetSteps - currentTick, 25 ));
     nextDelay = 8;

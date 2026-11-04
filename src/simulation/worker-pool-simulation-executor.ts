@@ -14,6 +14,8 @@ export class WorkerPoolSimulationExecutor implements SimulationExecutor {
   private currentRunToken = 0;
   private currentMode: RunMode = "normal";
   private isPausedState = false;
+  private pendingDispatchSlots: Set<WorkerSlot> = new Set();
+  private onResumeCallback: (() => void) | null = null;
 
   constructor() {
     this.ensurePool();
@@ -89,6 +91,9 @@ export class WorkerPoolSimulationExecutor implements SimulationExecutor {
     for (const slot of this.slots) {
       slot.worker.postMessage(msg);
     }
+    if (this.onResumeCallback) {
+      this.onResumeCallback();
+    }
   }
 
   terminate(): void {
@@ -100,6 +105,8 @@ export class WorkerPoolSimulationExecutor implements SimulationExecutor {
       }
     }
     this.slots = [];
+    this.pendingDispatchSlots.clear();
+    this.onResumeCallback = null;
     this.isPausedState = false;
   }
 
@@ -125,6 +132,8 @@ export class WorkerPoolSimulationExecutor implements SimulationExecutor {
       const cleanupListeners: (() => void)[] = [];
 
       const finishAndCleanup = () => {
+        this.onResumeCallback = null;
+        this.pendingDispatchSlots.clear();
         for (const cleanup of cleanupListeners) {
           cleanup();
         }
@@ -141,15 +150,24 @@ export class WorkerPoolSimulationExecutor implements SimulationExecutor {
           return;
         }
 
+        if (this.isPausedState || params.isPaused()) {
+          slot.busy = false;
+          slot.assignedGenome = null;
+          this.pendingDispatchSlots.add(slot);
+          return;
+        }
+
         if (nextCandidateIndex >= population.length) {
           slot.busy = false;
           slot.assignedGenome = null;
+          this.pendingDispatchSlots.delete(slot);
           if (results.length === population.length) {
             finishAndCleanup();
           }
           return;
         }
 
+        this.pendingDispatchSlots.delete(slot);
         const genome = population[nextCandidateIndex++]!;
         slot.busy = true;
         slot.assignedGenome = genome;
@@ -163,6 +181,17 @@ export class WorkerPoolSimulationExecutor implements SimulationExecutor {
           mode: this.currentMode
         };
         slot.worker.postMessage(msg);
+      };
+
+      this.onResumeCallback = () => {
+        if (shouldStop() || runToken !== this.currentRunToken) {
+          finishAndCleanup();
+          return;
+        }
+        const queuedSlots = Array.from(this.pendingDispatchSlots);
+        for (const slot of queuedSlots) {
+          dispatchNext(slot);
+        }
       };
 
       for (const slot of this.slots) {
