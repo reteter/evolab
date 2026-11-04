@@ -175,7 +175,7 @@ export class RunController {
       frozenConfig.terrainProfile,
       frozenConfig.difficulty
     );
-    const manifest = checkpoint.manifest;
+    const manifest = createManifest(frozenConfig);
     const log = new RunLog();
     log.restore(checkpoint.history, checkpoint.samplingStride, checkpoint.bestRecord);
 
