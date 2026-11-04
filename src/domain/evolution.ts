@@ -276,7 +276,8 @@ function randomGenes(random: RandomSource, mode: WheelCountMode): VehicleGenes {
   const wheelCount = allowed[Math.min(chosenIndex, allowed.length - 1)] ?? 2;
 
   const genes: Record<string, number> = {
-    wheelCount
+    wheelCount,
+    legacyAnchors: 0
   };
 
   for (const { key, minimum, maximum } of CONTINUOUS_GENE_RANGES) {
@@ -322,7 +323,8 @@ function crossoverGenes(
   random: RandomSource
 ): VehicleGenes {
   const crossed: Record<string, number> = {
-    wheelCount: random() < 0.5 ? first.wheelCount : second.wheelCount
+    wheelCount: random() < 0.5 ? first.wheelCount : second.wheelCount,
+    legacyAnchors: random() < 0.5 ? first.legacyAnchors : second.legacyAnchors
   };
 
   for (const { key } of CONTINUOUS_GENE_RANGES) {

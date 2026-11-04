@@ -6,6 +6,7 @@ import type {
   VehicleGenes,
   WheelCountMode
 } from "./indexed-db";
+import { APP_BUILD_ID } from "../domain/types";
 import { validateRunConfig } from "../domain/evolution";
 
 export interface ExportPayload {
@@ -80,6 +81,7 @@ export function migrateGenes(oldGenes: any): VehicleGenes {
     motorTorque: oldGenes.motorTorque ?? 60,
 
     wheelCount: 2,
+    legacyAnchors: 1,
 
     wheel0Radius: slot0.radius,
     wheel0MountX: slot0.mountX,
@@ -156,7 +158,8 @@ export function migrateSavedRun(run: SavedRun): SavedRun {
   const migratedManifest = {
     ...cp.manifest,
     config: migratedConfig,
-    evolution: cp.manifest?.evolution ?? ("rank-uniform-triangular@3" as const)
+    buildId: APP_BUILD_ID,
+    evolution: "rank-uniform-triangular@3" as const
   };
 
   return {

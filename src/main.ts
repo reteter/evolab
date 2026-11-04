@@ -707,7 +707,8 @@ function showGenome(genome: Genome | null): void {
       const name = document.createElement("dt");
       const value = document.createElement("dd");
       name.textContent = label;
-      value.textContent = genome.genes[key].toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+      const rawVal = genome.genes[key];
+      value.textContent = typeof rawVal === "number" ? rawVal.toLocaleString("pl-PL", { maximumFractionDigits: 2 }) : "—";
       row.append(name, value);
       return row;
     })

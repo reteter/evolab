@@ -54,13 +54,19 @@ export function buildPhenotype(genome: Genome): VehiclePhenotype {
   const totalTorque = 2 * genes.motorTorque;
   const totalDriveShare = rawWheels.reduce((sum, w) => sum + w.driveShare, 0);
 
-  const wheels: WheelPhenotype[] = rawWheels.map((slot) => {
+  const wheels: WheelPhenotype[] = rawWheels.map((slot, index) => {
     const anchorX = width * slot.mountX;
-    // Wysokość podłogi w punkcie anchorX:
-    // interpolacja liniowa między (-0.62*width, rearFloor) a (0.58*width, frontFloor)
-    const t = clamp((anchorX - (-width * 0.62)) / (width * 0.58 - (-width * 0.62)), 0, 1);
-    const floorY = rearFloor + t * (frontFloor - rearFloor);
-    const anchorY = floorY + height * 0.02;
+    let anchorY: number;
+
+    if (Boolean(genes.legacyAnchors) && index <= 1) {
+      // W starym modelu v1: slot 0 miał rearFloor + height * 0.02, a slot 1 miał frontFloor + height * 0.02
+      anchorY = (index === 0 ? rearFloor : frontFloor) + height * 0.02;
+    } else {
+      // Nowy model: interpolacja liniowa wysokości podłogi wzdłuż osi X korpusu
+      const t = clamp((anchorX - (-width * 0.62)) / (width * 0.58 - (-width * 0.62)), 0, 1);
+      const floorY = rearFloor + t * (frontFloor - rearFloor);
+      anchorY = floorY + height * 0.02;
+    }
 
     const torque =
       totalDriveShare > 1e-9

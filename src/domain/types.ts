@@ -54,6 +54,9 @@ export interface VehicleGenes {
   // Aktywna liczba kół
   wheelCount: number;
 
+  // Flaga zachowania dawnych wysokości mocowań dla zmigrowanych pojazdów v1 (1 dla starych, 0 dla nowych)
+  legacyAnchors: number;
+
   // Slot 0
   wheel0Radius: number;
   wheel0MountX: number;
