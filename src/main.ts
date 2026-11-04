@@ -275,9 +275,7 @@ function toggleReplay(): void {
         snapshot: frame,
         replay: true
       });
-      currentDistance.textContent = formatDistance(
-        Math.max(0, frame.chassis.x)
-      );
+      currentDistance.textContent = formatDistance(frame.distance);
     },
     () => controller.exitReplay()
   );

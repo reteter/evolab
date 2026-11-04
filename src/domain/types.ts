@@ -82,7 +82,9 @@ export interface TrialSnapshot {
   finite: boolean;
 }
 
-export interface TraceFrame extends TrialSnapshot {}
+export interface TraceFrame extends TrialSnapshot {
+  distance: number;
+}
 
 export type TrialEndReason =
   | "stagnation"
