@@ -68,10 +68,25 @@ export class ComparisonView {
   private renderTable(runs: SavedRun[]): void {
     this.tableBody.replaceChildren();
 
+    const isTriple = (runs[0]?.checkpoint.config.trainingMode ?? "single") === "triple";
+
     const headers: { label: string; getValue: (run: SavedRun) => string }[] = [
       { label: "Nazwa", getValue: (r) => r.name },
+      {
+        label: "Tryb treningu",
+        getValue: (r) =>
+          (r.checkpoint.config.trainingMode ?? "single") === "triple"
+            ? "Trzy trasy"
+            : "Jedna trasa"
+      },
       { label: "Seed", getValue: (r) => r.checkpoint.config.seed },
-      { label: "Profil terenu", getValue: (r) => r.checkpoint.config.terrainProfile },
+      {
+        label: "Profil terenu",
+        getValue: (r) =>
+          (r.checkpoint.config.trainingMode ?? "single") === "triple"
+            ? "Łagodny, Wzgórza, Wyboisty"
+            : r.checkpoint.config.terrainProfile
+      },
       { label: "Trudność", getValue: (r) => `${r.checkpoint.config.difficulty}/5` },
       { label: "Populacja", getValue: (r) => String(r.checkpoint.config.populationSize) },
       { label: "Elity", getValue: (r) => String(r.checkpoint.config.eliteCount) },
@@ -89,10 +104,14 @@ export class ComparisonView {
       },
       {
         label: "Rekord",
-        getValue: (r) =>
-          r.checkpoint.bestRecord
-            ? `${formatDistance(r.checkpoint.bestRecord.result.maxDistance)} (G${r.checkpoint.bestRecord.generation})`
-            : "—"
+        getValue: (r) => {
+          if (!r.checkpoint.bestRecord) return "—";
+          const isRunTriple = (r.checkpoint.config.trainingMode ?? "single") === "triple";
+          const val = isRunTriple
+            ? formatPoints(r.checkpoint.bestRecord.score ?? 0)
+            : formatDistance(r.checkpoint.bestRecord.result.maxDistance);
+          return `${val} (G${r.checkpoint.bestRecord.generation})`;
+        }
       }
     ];
 
@@ -138,9 +157,11 @@ export class ComparisonView {
       ...allPoints.flatMap((p) => [p.bestDistance, p.averageDistance])
     );
 
+    const isTriple = (runs[0]?.checkpoint.config.trainingMode ?? "single") === "triple";
+
     this.description.textContent = `Porównanie ${runs.length} przebiegów w zakresie pokoleń ${minGeneration}–${maxGeneration}.`;
 
-    this.drawGrid(maxDistance, minGeneration, maxGeneration);
+    this.drawGrid(maxDistance, minGeneration, maxGeneration, isTriple);
 
     runs.forEach((run, idx) => {
       const color = RUN_COLORS[idx % RUN_COLORS.length]!.stroke;
@@ -154,7 +175,7 @@ export class ComparisonView {
     });
   }
 
-  private drawGrid(maximum: number, minimumGeneration: number, maximumGeneration: number): void {
+  private drawGrid(maximum: number, minimumGeneration: number, maximumGeneration: number, isTriple = false): void {
     const plotHeight = HEIGHT - PADDING.top - PADDING.bottom;
     const plotWidth = WIDTH - PADDING.left - PADDING.right;
 
@@ -177,7 +198,7 @@ export class ComparisonView {
         class: "chart-axis-label",
         "text-anchor": "end"
       });
-      label.textContent = formatAxis(value);
+      label.textContent = isTriple ? formatPointsAxis(value) : formatAxis(value);
       this.svg.append(label);
     }
 
@@ -260,9 +281,20 @@ function formatDistance(value: number): string {
   })} m`;
 }
 
+function formatPoints(value: number): string {
+  return `${value.toLocaleString("pl-PL", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  })} pkt`;
+}
+
 function formatAxis(value: number): string {
   if (value >= 100) {
     return `${Math.round(value)} m`;
   }
   return `${value.toFixed(1)} m`;
+}
+
+function formatPointsAxis(value: number): string {
+  return `${Math.round(value)} pkt`;
 }

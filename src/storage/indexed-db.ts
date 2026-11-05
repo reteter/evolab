@@ -116,7 +116,7 @@ export class IndexedDbStorage implements StoragePort {
 
       req.onsuccess = () => {
         const rawRuns = (req.result as SavedRun[]) || [];
-        const runs = rawRuns.map(migrateSavedRun);
+        const runs = rawRuns.map((r) => migrateSavedRun(r));
         runs.sort((a, b) => b.updatedAt - a.updatedAt);
         resolve(runs);
       };

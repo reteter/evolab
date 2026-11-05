@@ -1,13 +1,19 @@
 import { createRng, deriveSeed, randomBetween, type RandomSource } from "./rng";
 import type {
+  EvaluatedIndividual,
   GenerationSummary,
   Genome,
   RunConfig,
+  Terrain,
+  TerrainProfile,
+  TrackTrialSummary,
+  TrainingMode,
   TrialResult,
   VehicleGeneKey,
   VehicleGenes,
   WheelCountMode
 } from "./types";
+import { getTrackFinishDistance } from "./world";
 
 export interface GeneRange {
   key: VehicleGeneKey;
@@ -65,7 +71,8 @@ export const DEFAULT_RUN_CONFIG: RunConfig = {
   eliteCount: 1,
   terrainProfile: "smooth",
   difficulty: 3,
-  wheelCountMode: "2-4"
+  wheelCountMode: "2-4",
+  trainingMode: "single"
 };
 
 export function allowedWheelCounts(mode: WheelCountMode): readonly number[] {
@@ -130,6 +137,13 @@ export function validateRunConfig(config: RunConfig): string[] {
   ) {
     issues.push("Nieprawidłowy tryb liczby kół.");
   }
+  if (
+    config.trainingMode !== undefined &&
+    config.trainingMode !== "single" &&
+    config.trainingMode !== "triple"
+  ) {
+    issues.push("Nieprawidłowy tryb treningu.");
+  }
   return issues;
 }
 
@@ -145,6 +159,59 @@ export function createInitialPopulation(config: RunConfig): Genome[] {
   }));
 }
 
+export function calculateTrackProgress(result: TrialResult, terrain: Terrain, startX = 0): number {
+  if (result.reason === "finished") {
+    return 100;
+  }
+  const finishDistance = getTrackFinishDistance(terrain, startX);
+  return clamp((result.maxDistance / finishDistance) * 100, 0, 100);
+}
+
+export function evaluateMultiTrackIndividual(
+  genome: Genome,
+  trackResults: readonly { profile: TerrainProfile; result: TrialResult; terrain: Terrain }[]
+): EvaluatedIndividual {
+  const summaries: TrackTrialSummary[] = trackResults.map(({ profile, result, terrain }) => {
+    const progressPercent = calculateTrackProgress(result, terrain);
+    return {
+      profile,
+      result,
+      progressPercent
+    };
+  });
+
+  const progresses = summaries.map((s) => s.progressPercent);
+  const avgProgress = progresses.reduce((a, b) => a + b, 0) / (progresses.length || 1);
+  const minProgress = Math.min(...progresses);
+  const score = 0.5 * avgProgress + 0.5 * minProgress;
+
+  const totalSpeed = summaries.reduce((sum, s) => sum + s.result.averageSpeed, 0);
+  const averageSpeed = totalSpeed / (summaries.length || 1);
+
+  return {
+    genome,
+    score,
+    averageSpeed,
+    trackResults: summaries
+  };
+}
+
+export function rankEvaluatedIndividuals(
+  individuals: readonly EvaluatedIndividual[]
+): EvaluatedIndividual[] {
+  return [...individuals].sort((left, right) => {
+    const scoreDifference = right.score - left.score;
+    if (Math.abs(scoreDifference) > 1e-9) {
+      return scoreDifference;
+    }
+    const speedDifference = right.averageSpeed - left.averageSpeed;
+    if (Math.abs(speedDifference) > 1e-9) {
+      return speedDifference;
+    }
+    return left.genome.id.localeCompare(right.genome.id);
+  });
+}
+
 export function rankResults(results: readonly TrialResult[]): TrialResult[] {
   return [...results].sort((left, right) => {
     const distanceDifference = right.maxDistance - left.maxDistance;
@@ -157,6 +224,55 @@ export function rankResults(results: readonly TrialResult[]): TrialResult[] {
     }
     return left.genome.id.localeCompare(right.genome.id);
   });
+}
+
+export function createNextPopulationFromEvaluated(
+  ranked: readonly EvaluatedIndividual[],
+  config: RunConfig,
+  generation: number
+): Genome[] {
+  if (ranked.length !== config.populationSize) {
+    throw new Error("Nie można utworzyć pokolenia z niepełnej populacji.");
+  }
+
+  const next: Genome[] = ranked
+    .slice(0, config.eliteCount)
+    .map((individual, index) => ({
+      id: genomeId(generation, index + 1),
+      generation,
+      genes: { ...individual.genome.genes },
+      lineage: { kind: "elite", sourceId: individual.genome.id }
+    }));
+
+  while (next.length < config.populationSize) {
+    const childIndex = next.length + 1;
+    const selectionRandom = createRng(
+      deriveSeed(config.seed, "parent-selection", generation, childIndex)
+    );
+    const first = selectRankBiasedItem(ranked, selectionRandom);
+    const second = selectDistinctParentItem(ranked, first, selectionRandom);
+    const crossed = crossoverGenes(
+      first.genome.genes,
+      second.genome.genes,
+      createRng(deriveSeed(config.seed, "crossover", generation, childIndex))
+    );
+    const genes = mutateGenes(
+      crossed,
+      config,
+      createRng(deriveSeed(config.seed, "mutation", generation, childIndex))
+    );
+    next.push({
+      id: genomeId(generation, childIndex),
+      generation,
+      genes,
+      lineage: {
+        kind: "offspring",
+        parentIds: [first.genome.id, second.genome.id]
+      }
+    });
+  }
+
+  return next;
 }
 
 export function createNextPopulation(
@@ -226,6 +342,26 @@ export function summarizeGeneration(
   };
 }
 
+export function summarizeMultiTrackGeneration(
+  generation: number,
+  ranked: readonly EvaluatedIndividual[]
+): GenerationSummary {
+  const best = ranked[0];
+  const total = ranked.reduce((sum, ind) => sum + ind.score, 0);
+  const invalidCount = ranked.filter((ind) =>
+    ind.trackResults.some((t) => t.result.reason === "invalid")
+  ).length;
+
+  return {
+    generation,
+    bestDistance: best?.score ?? 0, // Score points stored in bestDistance for summary
+    averageDistance: ranked.length === 0 ? 0 : total / ranked.length,
+    invalidCount,
+    bestGenomeId: best?.genome.id ?? "—",
+    completedTrials: ranked.length
+  };
+}
+
 export function hashEvolutionState(
   summaries: readonly GenerationSummary[],
   population: readonly Genome[]
@@ -287,10 +423,10 @@ function randomGenes(random: RandomSource, mode: WheelCountMode): VehicleGenes {
   return genes as unknown as VehicleGenes;
 }
 
-function selectRankBiased(
-  ranked: readonly TrialResult[],
+function selectRankBiasedItem<T extends { genome: Genome }>(
+  ranked: readonly T[],
   random: RandomSource
-): TrialResult {
+): T {
   const index = Math.min(ranked.length - 1, Math.floor(random() ** 2 * ranked.length));
   const result = ranked[index];
   if (result === undefined) {
@@ -299,22 +435,37 @@ function selectRankBiased(
   return result;
 }
 
-function selectDistinctParent(
-  ranked: readonly TrialResult[],
-  first: TrialResult,
+function selectDistinctParentItem<T extends { genome: Genome }>(
+  ranked: readonly T[],
+  first: T,
   random: RandomSource
-): TrialResult {
+): T {
   if (ranked.length < 2) {
     return first;
   }
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const candidate = selectRankBiased(ranked, random);
+    const candidate = selectRankBiasedItem(ranked, random);
     if (candidate.genome.id !== first.genome.id) {
       return candidate;
     }
   }
   const fallback = ranked.find((candidate) => candidate.genome.id !== first.genome.id);
   return fallback ?? first;
+}
+
+function selectRankBiased(
+  ranked: readonly TrialResult[],
+  random: RandomSource
+): TrialResult {
+  return selectRankBiasedItem(ranked, random);
+}
+
+function selectDistinctParent(
+  ranked: readonly TrialResult[],
+  first: TrialResult,
+  random: RandomSource
+): TrialResult {
+  return selectDistinctParentItem(ranked, first, random);
 }
 
 function crossoverGenes(

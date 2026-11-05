@@ -5,12 +5,20 @@ const WIDTH = 900;
 const HEIGHT = 260;
 const PADDING = { top: 22, right: 28, bottom: 36, left: 54 };
 
+export type UnitFormat = "meters" | "points";
+
 export class TrendChart {
+  private unit: UnitFormat = "meters";
+
   constructor(
     private readonly svg: SVGSVGElement,
     private readonly tableBody: HTMLTableSectionElement,
     private readonly description: HTMLElement
   ) {}
+
+  setUnit(unit: UnitFormat): void {
+    this.unit = unit;
+  }
 
   render(summaries: readonly GenerationSummary[]): void {
     this.svg.replaceChildren();
@@ -34,8 +42,8 @@ export class TrendChart {
     const maximumGeneration = summaries.at(-1)?.generation ?? minimumGeneration;
     this.description.textContent =
       `Pokolenia ${minimumGeneration}–${maximumGeneration}. ` +
-      `Ostatni rekord ${formatDistance(summaries.at(-1)?.bestDistance ?? 0)}, ` +
-      `średnia ${formatDistance(summaries.at(-1)?.averageDistance ?? 0)}.`;
+      `Ostatni rekord ${this.formatVal(summaries.at(-1)?.bestDistance ?? 0)}, ` +
+      `średnia ${this.formatVal(summaries.at(-1)?.averageDistance ?? 0)}.`;
 
     this.drawGrid(maximum, minimumGeneration, maximumGeneration);
     this.drawSeries(
@@ -94,7 +102,7 @@ export class TrendChart {
         class: "chart-axis-label",
         "text-anchor": "end"
       });
-      label.textContent = formatAxis(value);
+      label.textContent = this.formatAxis(value);
       this.svg.append(label);
     }
 
@@ -170,8 +178,8 @@ export class TrendChart {
       const row = document.createElement("tr");
       for (const value of [
         String(summary.generation),
-        formatDistance(summary.bestDistance),
-        formatDistance(summary.averageDistance),
+        this.formatVal(summary.bestDistance),
+        this.formatVal(summary.averageDistance),
         summary.bestGenomeId
       ]) {
         const cell = document.createElement("td");
@@ -180,6 +188,23 @@ export class TrendChart {
       }
       this.tableBody.append(row);
     }
+  }
+
+  private formatVal(val: number): string {
+    if (this.unit === "points") {
+      return `${val.toLocaleString("pl-PL", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      })} pkt`;
+    }
+    return formatDistance(val);
+  }
+
+  private formatAxis(val: number): string {
+    if (this.unit === "points") {
+      return `${Math.round(val)} pkt`;
+    }
+    return formatAxis(val);
   }
 
   private xFor(

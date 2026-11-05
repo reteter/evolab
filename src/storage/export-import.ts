@@ -9,14 +9,14 @@ import type {
 import { validateRunConfig } from "../domain/evolution";
 
 export interface ExportPayload {
-  version: 2;
+  version: 3;
   run: SavedRun;
 }
 
 export function exportRunToJson(run: SavedRun): string {
   const payload: ExportPayload = {
-    version: 2,
-    run: migrateSavedRun(run)
+    version: 3,
+    run: migrateSavedRun(run, true)
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -133,31 +133,45 @@ export function migrateGenome(genome: any): Genome {
 
 export function migrateConfig(config: any): RunConfig {
   const wheelCountMode: WheelCountMode = config.wheelCountMode ?? "2";
+  const trainingMode = config.trainingMode ?? "single";
   return {
     ...config,
-    wheelCountMode
+    wheelCountMode,
+    trainingMode
   };
 }
 
-export function migrateSavedRun(run: SavedRun): SavedRun {
+export function migrateSavedRun(run: SavedRun, preserveManifest = true): SavedRun {
   const cp = run.checkpoint;
   const migratedConfig = migrateConfig(cp.config);
   const migratedNextPopulation = (cp.nextPopulation || []).map(migrateGenome);
   let migratedBestRecord = cp.bestRecord;
   if (migratedBestRecord?.result?.genome) {
+    const migratedTrackResults = migratedBestRecord.trackResults?.map((t: any) => ({
+      ...t,
+      result: {
+        ...t.result,
+        genome: migrateGenome(t.result.genome)
+      }
+    }));
+
     migratedBestRecord = {
       ...migratedBestRecord,
       result: {
         ...migratedBestRecord.result,
         genome: migrateGenome(migratedBestRecord.result.genome)
-      }
+      },
+      trackResults: migratedTrackResults
     };
   }
 
-  const migratedManifest = {
-    ...cp.manifest,
-    config: migratedConfig
-  };
+  // Ustalenie: "Zachowuj historyczne manifesty podczas importu i ponownego eksportu; aktualny manifest powstaje dopiero przy wznowieniu obliczeń."
+  const migratedManifest = preserveManifest && cp.manifest
+    ? cp.manifest
+    : {
+        ...cp.manifest,
+        config: migratedConfig
+      };
 
   return {
     ...run,
@@ -184,8 +198,8 @@ export function importRunFromJson(jsonText: string): SavedRun {
   }
 
   const record = parsed as Record<string, unknown>;
-  if (record.version !== 1 && record.version !== 2) {
-    throw new Error(`Nieobsługiwana wersja pliku (${String(record.version)}). Oczekiwana wersja: 1 lub 2.`);
+  if (record.version !== 1 && record.version !== 2 && record.version !== 3) {
+    throw new Error(`Nieobsługiwana wersja pliku (${String(record.version)}). Oczekiwana wersja: 1, 2 lub 3.`);
   }
 
   if (typeof record.run !== "object" || record.run === null) {
