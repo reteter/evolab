@@ -18,13 +18,21 @@ import { ReplayPlayer } from "./presentation/replay-player";
 import { TrendChart } from "./presentation/trend-chart";
 import { ComparisonView } from "./presentation/comparison-view";
 import { RunController, type RunViewState } from "./run/run-controller";
+import { ArenaController, type ArenaState } from "./run/arena-controller";
 import { WorkerPoolSimulationExecutor } from "./simulation/worker-pool-simulation-executor";
 import {
   IndexedDbStorage,
+  type GarageVehicle,
   type RunCheckpoint,
   type SavedRun
 } from "./storage/indexed-db";
-import { exportRunToJson, importRunFromJson } from "./storage/export-import";
+import {
+  exportRunToJson,
+  exportVehicleToJson,
+  importRunFromJson,
+  importVehicleFromJson
+} from "./storage/export-import";
+import { renderVehicleSilhouette } from "./presentation/silhouette-renderer";
 
 const form = required<HTMLFormElement>("#run-form");
 const configFields = required<HTMLFieldSetElement>("#config-fields");
@@ -69,6 +77,7 @@ const generationAverageValue = required<HTMLElement>(
 );
 const recordGenome = required<HTMLElement>("#record-genome");
 const recordTrackDetails = required<HTMLElement>("#record-track-details");
+const addRecordToGarageBtn = required<HTMLButtonElement>("#add-record-to-garage-btn");
 const headlessOverlay = required<HTMLElement>("#headless-overlay");
 const runSummary = required<HTMLElement>("#run-summary");
 const summaryResult = required<HTMLElement>("#summary-result");
@@ -84,6 +93,21 @@ const importRunBtn = required<HTMLButtonElement>("#import-run-btn");
 const compareBtn = required<HTMLButtonElement>("#compare-btn");
 const comparisonSection = required<HTMLElement>("#comparison-section");
 const closeComparisonBtn = required<HTMLButtonElement>("#close-comparison-btn");
+
+// Garage & Arena elements
+const importVehicleInput = required<HTMLInputElement>("#import-vehicle-input");
+const importVehicleBtn = required<HTMLButtonElement>("#import-vehicle-btn");
+const arenaSeedInput = required<HTMLInputElement>("#arena-seed");
+const arenaRandomSeedBtn = required<HTMLButtonElement>("#arena-random-seed");
+const arenaDifficultyInput = required<HTMLInputElement>("#arena-difficulty");
+const arenaDifficultyOutput = required<HTMLOutputElement>("#arena-difficulty-output");
+const startArenaBtn = required<HTMLButtonElement>("#start-arena-btn");
+const arenaBlockedMsg = required<HTMLElement>("#arena-blocked-msg");
+const garageVehiclesGrid = required<HTMLElement>("#garage-vehicles-grid");
+const arenaResultsSection = required<HTMLElement>("#arena-results-section");
+const podiumDisplay = required<HTMLElement>("#podium-display");
+const arenaResultsTableBody = required<HTMLTableSectionElement>("#arena-results-table-body");
+const backToTrainingBtn = required<HTMLButtonElement>("#back-to-training-btn");
 
 const storage = new IndexedDbStorage();
 const renderer = new CanvasRenderer(canvas);
@@ -101,7 +125,14 @@ const comparisonView = new ComparisonView(
 );
 
 const replay = new ReplayPlayer();
-const controller = new RunController(new WorkerPoolSimulationExecutor());
+const sharedExecutor = new WorkerPoolSimulationExecutor();
+const controller = new RunController(sharedExecutor);
+const arenaController = new ArenaController(sharedExecutor);
+
+let activeAppMode: "training" | "arena" = "training";
+let currentArenaState: ArenaState = arenaController.getState();
+let garageVehiclesCache: GarageVehicle[] = [];
+let selectedVehicleIdsForArena = new Set<string>();
 
 let currentState = controller.getState();
 let renderedHistorySignature = "";
@@ -159,7 +190,108 @@ controller.setCheckpointHandler(async (runId: string, checkpoint: RunCheckpoint)
 
 controller.subscribe((state) => {
   currentState = state;
-  updateInterface(state);
+  if (activeAppMode === "training") {
+    updateInterface(state);
+  }
+  updateGarageAndArenaControls();
+});
+
+arenaController.subscribe((state) => {
+  currentArenaState = state;
+  if (activeAppMode === "arena") {
+    updateArenaInterface(state);
+  }
+});
+
+addRecordToGarageBtn.addEventListener("click", async () => {
+  const best = currentState.bestRecord;
+  if (!best) return;
+
+  const config = currentState.manifest?.config;
+  const seed = config?.seed ?? "brak";
+  const gen = best.generation;
+  const trainingMode = (config?.trainingMode ?? "single") as "single" | "triple";
+
+  // Niezależna głęboka kopia genomu
+  const clonedGenome: Genome = JSON.parse(JSON.stringify(best.result.genome));
+  const newVehicle: GarageVehicle = {
+    id: crypto.randomUUID(),
+    name: `Pojazd ${seed} · G${gen}`,
+    createdAt: Date.now(),
+    sourceRun: {
+      runId: currentState.runId ?? undefined,
+      seed,
+      generation: gen,
+      trainingMode,
+      buildId: currentState.manifest?.buildId
+    },
+    genome: clonedGenome
+  };
+
+  await storage.saveVehicle(newVehicle);
+  await refreshGarageList();
+  alert(`Zapisano pojazd "${newVehicle.name}" w garażu.`);
+});
+
+importVehicleBtn.addEventListener("click", () => {
+  importVehicleInput.value = "";
+  importVehicleInput.click();
+});
+
+importVehicleInput.addEventListener("change", async () => {
+  const file = importVehicleInput.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const imported = importVehicleFromJson(text);
+    await storage.saveVehicle(imported);
+    await refreshGarageList();
+    alert(`Pomyślnie zaimportowano pojazd: ${imported.name}`);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "Nie udało się zaimportować pojazdu.");
+  }
+});
+
+arenaRandomSeedBtn.addEventListener("click", () => {
+  arenaSeedInput.value = `arena-${crypto.getRandomValues(new Uint32Array(1))[0]?.toString(36) ?? "gp"}`;
+});
+
+arenaDifficultyInput.addEventListener("input", () => {
+  arenaDifficultyOutput.value = `Trudność: ${arenaDifficultyInput.value}/5`;
+});
+
+startArenaBtn.addEventListener("click", async () => {
+  const selectedVehicles = garageVehiclesCache.filter((v) =>
+    selectedVehicleIdsForArena.has(v.id)
+  );
+  if (selectedVehicles.length < 2 || selectedVehicles.length > 4) {
+    return;
+  }
+
+  // Przełącz w tryb Areny
+  activeAppMode = "arena";
+  replay.cancel();
+  arenaResultsSection.hidden = true;
+  updateInterface(currentState);
+  updateGarageAndArenaControls();
+
+  const arenaConfig = {
+    seed: arenaSeedInput.value.trim() || "arena-seed",
+    difficulty: Number(arenaDifficultyInput.value) || 3
+  };
+
+  try {
+    await arenaController.startTournament(selectedVehicles, arenaConfig);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "Błąd podczas rozgrywania zawodów Areny.");
+  }
+});
+
+backToTrainingBtn.addEventListener("click", () => {
+  activeAppMode = "training";
+  arenaResultsSection.hidden = true;
+  updateInterface(currentState);
+  updateGarageAndArenaControls();
 });
 
 form.addEventListener("submit", (event) => {
@@ -263,7 +395,20 @@ randomSeedButton.addEventListener("click", () => {
 pauseButton.addEventListener("click", togglePause);
 stopButton.addEventListener("click", () => {
   replay.cancel();
-  controller.stop();
+  if (activeAppMode === "arena") {
+    if (currentArenaState.status === "replay") {
+      arenaController.exitReplay();
+      exitArenaReplay();
+    } else {
+      arenaController.stop();
+      activeAppMode = "training";
+      arenaResultsSection.hidden = true;
+      updateInterface(currentState);
+      updateGarageAndArenaControls();
+    }
+  } else {
+    controller.stop();
+  }
 });
 replayButton.addEventListener("click", toggleReplay);
 
@@ -271,7 +416,11 @@ for (const button of modeButtons) {
   button.addEventListener("click", () => {
     const mode = button.dataset.mode;
     if (isRunMode(mode)) {
-      controller.setMode(mode);
+      if (activeAppMode === "arena") {
+        arenaController.setMode(mode);
+      } else {
+        controller.setMode(mode);
+      }
     }
   });
 }
@@ -286,11 +435,23 @@ document.addEventListener("keydown", (event) => {
   } else if (event.key.toLowerCase() === "r") {
     toggleReplay();
   } else if (event.key === "1") {
-    controller.setMode("normal");
+    if (activeAppMode === "arena") {
+      arenaController.setMode("normal");
+    } else {
+      controller.setMode("normal");
+    }
   } else if (event.key === "2") {
-    controller.setMode("fast");
+    if (activeAppMode === "arena") {
+      arenaController.setMode("fast");
+    } else {
+      controller.setMode("fast");
+    }
   } else if (event.key === "3") {
-    controller.setMode("headless");
+    if (activeAppMode === "arena") {
+      arenaController.setMode("headless");
+    } else {
+      controller.setMode("headless");
+    }
   }
 });
 
@@ -300,6 +461,7 @@ void initStorageAndUi();
 
 async function initStorageAndUi(): Promise<void> {
   await refreshSavedRunsList();
+  await refreshGarageList();
   const lastActiveId = await storage.getLastActiveRunId();
   if (lastActiveId) {
     const run = await storage.getRun(lastActiveId);
@@ -307,6 +469,168 @@ async function initStorageAndUi(): Promise<void> {
       resumeLastRunButton.disabled = false;
       resumeLastRunButton.textContent = `Wznów ostatni (${run.name})`;
     }
+  }
+  updateGarageAndArenaControls();
+}
+
+async function refreshGarageList(): Promise<void> {
+  garageVehiclesCache = await storage.listVehicles();
+  for (const id of Array.from(selectedVehicleIdsForArena)) {
+    if (!garageVehiclesCache.some((v) => v.id === id)) {
+      selectedVehicleIdsForArena.delete(id);
+    }
+  }
+  renderGarageGrid();
+  updateGarageAndArenaControls();
+}
+
+function renderGarageGrid(): void {
+  garageVehiclesGrid.replaceChildren();
+
+  if (garageVehiclesCache.length === 0) {
+    const emptyP = document.createElement("p");
+    emptyP.className = "garage-empty";
+    emptyP.textContent = "Brak pojazdów w garażu. Dodaj rekordzistę z bieżącego lub zapisanego treningu.";
+    garageVehiclesGrid.append(emptyP);
+    return;
+  }
+
+  for (const vehicle of garageVehiclesCache) {
+    const isSelected = selectedVehicleIdsForArena.has(vehicle.id);
+    const card = document.createElement("div");
+    card.className = `vehicle-card${isSelected ? " is-selected" : ""}`;
+
+    const header = document.createElement("div");
+    header.className = "vehicle-card-header";
+
+    const title = document.createElement("h3");
+    title.className = "vehicle-card-title";
+    title.textContent = vehicle.name;
+
+    const selectLabel = document.createElement("label");
+    selectLabel.className = "vehicle-card-select";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = isSelected;
+
+    const maxReached = selectedVehicleIdsForArena.size >= 4 && !isSelected;
+    if (maxReached) {
+      checkbox.disabled = true;
+      selectLabel.title = "Maksymalnie 4 pojazdy na Arenie";
+    }
+
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        selectedVehicleIdsForArena.add(vehicle.id);
+      } else {
+        selectedVehicleIdsForArena.delete(vehicle.id);
+      }
+      renderGarageGrid();
+      updateGarageAndArenaControls();
+    });
+
+    const checkText = document.createElement("span");
+    checkText.textContent = "Arena";
+    selectLabel.append(checkbox, checkText);
+    header.append(title, selectLabel);
+
+    // Mini preview canvas
+    const previewCanvas = document.createElement("canvas");
+    previewCanvas.className = "vehicle-preview-canvas";
+    renderVehicleSilhouette(previewCanvas, vehicle.genome, 240, 100);
+
+    const dl = document.createElement("dl");
+    dl.className = "vehicle-card-meta";
+
+    const wheelCount = Math.min(4, Math.max(2, vehicle.genome.genes.wheelCount || 2));
+    const metaItems: [string, string][] = [
+      ["Liczba kół", `${wheelCount} koła`],
+      ["Pokolenie", `G${vehicle.sourceRun.generation}`],
+      ["Seed źródłowy", vehicle.sourceRun.seed],
+      ["Tryb źródłowy", vehicle.sourceRun.trainingMode === "triple" ? "Trzy trasy" : "Jedna trasa"]
+    ];
+
+    for (const [key, val] of metaItems) {
+      const dt = document.createElement("dt");
+      dt.textContent = key;
+      const dd = document.createElement("dd");
+      dd.textContent = val;
+      dl.append(dt, dd);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "vehicle-card-actions";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.className = "button";
+    renameBtn.type = "button";
+    renameBtn.textContent = "Zmień nazwę";
+    renameBtn.addEventListener("click", async () => {
+      const newName = prompt("Podaj nową nazwę pojazdu:", vehicle.name);
+      if (newName && newName.trim()) {
+        await storage.renameVehicle(vehicle.id, newName.trim());
+        await refreshGarageList();
+      }
+    });
+
+    const exportBtn = document.createElement("button");
+    exportBtn.className = "button";
+    exportBtn.type = "button";
+    exportBtn.textContent = "Eksportuj";
+    exportBtn.addEventListener("click", () => {
+      const json = exportVehicleToJson(vehicle);
+      downloadJson(json, `${vehicle.name.replace(/\s+/g, "_")}.json`);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "button button-danger";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Usuń";
+    deleteBtn.addEventListener("click", async () => {
+      if (confirm(`Czy na pewno chcesz usunąć pojazd "${vehicle.name}" z garażu?`)) {
+        await storage.deleteVehicle(vehicle.id);
+        selectedVehicleIdsForArena.delete(vehicle.id);
+        await refreshGarageList();
+      }
+    });
+
+    actions.append(renameBtn, exportBtn, deleteBtn);
+    card.append(header, previewCanvas, dl, actions);
+    garageVehiclesGrid.append(card);
+  }
+}
+
+function updateGarageAndArenaControls(): void {
+  // Przycisk "Dodaj rekordzistę do garażu"
+  const hasRecord = currentState.bestRecord !== null;
+  addRecordToGarageBtn.disabled = !hasRecord;
+
+  // Sprawdzanie czy trening jest aktywny
+  const trainingIsActive =
+    currentState.status === "running" ||
+    currentState.status === "paused" ||
+    currentState.status === "replay";
+
+  const count = selectedVehicleIdsForArena.size;
+  const countValid = count >= 2 && count <= 4;
+
+  startArenaBtn.textContent = `Uruchom Arenę (${count})`;
+  startArenaBtn.disabled = !countValid || trainingIsActive || activeAppMode === "arena";
+
+  if (trainingIsActive) {
+    arenaBlockedMsg.hidden = false;
+  } else {
+    arenaBlockedMsg.hidden = true;
+  }
+
+  // Uaktualnij przyciski w kartach zapisanych biegów gdy stan Areny ulega zmianie
+  const cardResumeButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
+    ".run-card-resume-btn"
+  );
+  const isTrainingOrArenaActive = trainingIsActive || activeAppMode === "arena";
+  for (const btn of cardResumeButtons) {
+    btn.disabled = isTrainingOrArenaActive;
   }
 }
 
@@ -456,6 +780,7 @@ function renderSavedRunsGrid(): void {
     resumeBtn.type = "button";
     resumeBtn.textContent = "Wznów";
     const isRunning =
+      activeAppMode === "arena" ||
       currentState.status === "running" ||
       currentState.status === "paused" ||
       currentState.status === "replay";
@@ -525,6 +850,7 @@ function updateCompareButton(): void {
 
 async function resumeRun(run: SavedRun): Promise<void> {
   const isRunning =
+    activeAppMode === "arena" ||
     currentState.status === "running" ||
     currentState.status === "paused" ||
     currentState.status === "replay";
@@ -584,6 +910,214 @@ function downloadJson(content: string, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+function updateArenaInterface(state: ArenaState): void {
+  const active = state.status === "running" || state.status === "paused";
+  const inReplay = state.status === "replay";
+  configFields.disabled = true;
+  randomSeedButton.disabled = true;
+  startButton.disabled = true;
+  resumeLastRunButton.disabled = true;
+  startArenaBtn.disabled = true;
+
+  status.dataset.status = state.status;
+  statusText.textContent =
+    state.status === "running"
+      ? "Arena aktywna"
+      : state.status === "paused"
+        ? "Arena: pauza"
+        : state.status === "replay"
+          ? "Replay Areny"
+          : state.status === "finished"
+            ? "Arena zakończona"
+            : "Arena zatrzymana";
+  runMessage.textContent = state.message;
+
+  pauseButton.disabled = state.status !== "running" && state.status !== "paused";
+  pauseButton.textContent = state.status === "paused" ? "Wznów" : "Pauza";
+  stopButton.disabled = state.status !== "running" && state.status !== "paused" && !inReplay;
+  replayButton.disabled = !inReplay;
+  replayButton.textContent = inReplay ? "Zakończ replay" : "Replay rekordu";
+  replayTrackSelect.hidden = true;
+
+  for (const button of modeButtons) {
+    const isActive = button.dataset.mode === state.mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  }
+
+  const liveList = state.liveVehicles;
+  const leader = liveList.find((v) => v.vehicleId === state.leaderVehicleId);
+
+  candidateId.textContent = leader ? `Lider · ${leader.name}` : "Zawody Areny";
+  candidateProgress.textContent = `Trasa ${state.trackIndex}/3 (${profileLabelPl(state.currentProfile)})`;
+  currentDistance.textContent = formatDistance(leader?.distance ?? 0);
+  distanceLabel.textContent = "Dystans lidera";
+
+  const headlessVisible = state.mode === "headless" && state.status === "running";
+  headlessOverlay.hidden = !headlessVisible;
+  if (headlessVisible && !headlessWasVisible) {
+    renderer.renderIdle();
+  }
+  headlessWasVisible = headlessVisible;
+
+  if (!headlessVisible && state.terrain !== null && leader) {
+    const vehiclesForRenderer = liveList.map((lv) => ({
+      genome: lv.genome,
+      snapshot: lv.snapshot
+    }));
+
+    renderer.render({
+      terrain: state.terrain,
+      genome: leader.genome,
+      snapshot: leader.snapshot,
+      vehicles: vehiclesForRenderer,
+      groupKey: `arena:${state.trackIndex}`
+    });
+  }
+
+  canvas.setAttribute(
+    "aria-label",
+    `Arena zawodów. Trasa ${state.trackIndex}/3 (${profileLabelPl(state.currentProfile)}). Uczestników: ${liveList.length}. Lider: ${leader?.name ?? "—"}.`
+  );
+
+  if (state.status === "finished" && state.results) {
+    renderArenaResults(state.results);
+    arenaResultsSection.hidden = false;
+    arenaResultsSection.scrollIntoView({ behavior: "smooth" });
+  }
+}
+
+function renderArenaResults(results: import("./run/arena-controller").ArenaParticipantResult[]): void {
+  // Render podium (top 3 or 4)
+  podiumDisplay.replaceChildren();
+
+  results.forEach((res, index) => {
+    const step = document.createElement("div");
+    step.className = `podium-step podium-step-${index + 1}`;
+
+    const name = document.createElement("div");
+    name.className = "podium-name";
+    name.textContent = res.name;
+
+    const score = document.createElement("div");
+    score.className = "podium-score";
+    score.textContent = `${res.score.toFixed(1).replace(".", ",")} pkt (${res.averageSpeed.toFixed(1).replace(".", ",")} m/s)`;
+
+    const box = document.createElement("div");
+    box.className = "podium-box";
+
+    const rank = document.createElement("div");
+    rank.className = "podium-rank";
+    rank.textContent = `${index + 1}`;
+
+    box.append(rank);
+    step.append(name, score, box);
+    podiumDisplay.append(step);
+  });
+
+  // Render table
+  arenaResultsTableBody.replaceChildren();
+
+  results.forEach((res, index) => {
+    const tr = document.createElement("tr");
+
+    const tdRank = document.createElement("td");
+    tdRank.textContent = `${index + 1}.`;
+
+    const tdName = document.createElement("td");
+    tdName.textContent = res.name;
+    tdName.style.fontWeight = "700";
+
+    const tdScore = document.createElement("td");
+    tdScore.textContent = `${res.score.toFixed(1).replace(".", ",")} pkt`;
+
+    const tdSpeed = document.createElement("td");
+    tdSpeed.textContent = `${res.averageSpeed.toFixed(2).replace(".", ",")} m/s`;
+
+    // Track columns (smooth, steep-hills, bumpy)
+    const trackOrder: TerrainProfile[] = ["smooth", "steep-hills", "bumpy"];
+    const trackTds = trackOrder.map((prof) => {
+      const td = document.createElement("td");
+      const trackRes = res.trackResults.find((t) => t.profile === prof);
+      if (trackRes) {
+        td.textContent = `${formatDistance(trackRes.result.maxDistance)} (${trackRes.progressPercent.toFixed(1).replace(".", ",")}%)`;
+      } else {
+        td.textContent = "—";
+      }
+      return td;
+    });
+
+    // Replay cell with select & button
+    const tdReplay = document.createElement("td");
+    const select = document.createElement("select");
+    select.className = "button";
+    select.style.padding = "2px 6px";
+    select.style.minHeight = "28px";
+    select.style.fontSize = "0.72rem";
+
+    for (const prof of trackOrder) {
+      const opt = document.createElement("option");
+      opt.value = prof;
+      opt.textContent = profileLabelPl(prof);
+      select.append(opt);
+    }
+
+    const replayBtn = document.createElement("button");
+    replayBtn.className = "button button-small";
+    replayBtn.style.minHeight = "28px";
+    replayBtn.style.padding = "2px 8px";
+    replayBtn.style.fontSize = "0.72rem";
+    replayBtn.textContent = "Odtwórz";
+
+    replayBtn.addEventListener("click", () => {
+      const chosenTrack = select.value as TerrainProfile;
+      playArenaParticipantReplay(res, chosenTrack);
+    });
+
+    tdReplay.style.display = "flex";
+    tdReplay.style.alignItems = "center";
+    tdReplay.style.gap = "6px";
+    tdReplay.append(select, replayBtn);
+
+    tr.append(tdRank, tdName, tdScore, tdSpeed, ...trackTds, tdReplay);
+    arenaResultsTableBody.append(tr);
+  });
+}
+
+function playArenaParticipantReplay(
+  participant: import("./run/arena-controller").ArenaParticipantResult,
+  profile: TerrainProfile
+): void {
+  const trackRes = participant.trackResults.find((t) => t.profile === profile);
+  if (!trackRes) return;
+
+  arenaResultsSection.hidden = true;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  arenaController.enterReplay(`Odtwarzanie przejazdu: ${participant.name} (${profileLabelPl(profile)})`);
+
+  candidateId.textContent = `Replay · ${participant.name}`;
+  candidateProgress.textContent = `${profileLabelPl(profile)} · powtórka`;
+  distanceLabel.textContent = "Dystans replay";
+
+  replay.play(
+    trackRes.result.trace,
+    (frame) => {
+      renderer.render({
+        terrain: trackRes.terrain,
+        genome: participant.genome,
+        snapshot: frame,
+        replay: true
+      });
+      currentDistance.textContent = formatDistance(frame.distance);
+    },
+    () => {
+      arenaController.exitReplay();
+      exitArenaReplay();
+    }
+  );
+}
+
 function updateInterface(state: RunViewState): void {
   const active =
     state.status === "running" ||
@@ -608,7 +1142,7 @@ function updateInterface(state: RunViewState): void {
     ".run-card-resume-btn"
   );
   for (const btn of cardResumeButtons) {
-    btn.disabled = active;
+    btn.disabled = active || activeAppMode === "arena";
   }
   const cardForkButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
     ".run-card-fork-btn"
@@ -793,14 +1327,31 @@ function showGenome(genome: Genome | null): void {
 }
 
 function togglePause(): void {
-  if (currentState.status === "paused") {
-    controller.resume();
-  } else if (currentState.status === "running") {
-    controller.pause();
+  if (activeAppMode === "arena") {
+    if (currentArenaState.status === "paused") {
+      arenaController.resume();
+    } else if (currentArenaState.status === "running") {
+      arenaController.pause();
+    }
+  } else {
+    if (currentState.status === "paused") {
+      controller.resume();
+    } else if (currentState.status === "running") {
+      controller.pause();
+    }
   }
 }
 
 function toggleReplay(): void {
+  if (activeAppMode === "arena") {
+    if (currentArenaState.status === "replay") {
+      replay.cancel();
+      arenaController.exitReplay();
+      exitArenaReplay();
+    }
+    return;
+  }
+
   if (currentState.status === "replay") {
     replay.cancel();
     controller.exitReplay();
@@ -830,6 +1381,14 @@ function toggleReplay(): void {
     },
     () => controller.exitReplay()
   );
+}
+
+function exitArenaReplay(): void {
+  arenaResultsSection.hidden = false;
+  arenaResultsSection.scrollIntoView({ behavior: "smooth" });
+  if (currentArenaState.results) {
+    renderArenaResults(currentArenaState.results);
+  }
 }
 
 function readConfig(): RunConfig {
