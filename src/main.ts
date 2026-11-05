@@ -272,6 +272,8 @@ startArenaBtn.addEventListener("click", async () => {
   activeAppMode = "arena";
   replay.cancel();
   arenaResultsSection.hidden = true;
+  updateInterface(currentState);
+  updateGarageAndArenaControls();
 
   const arenaConfig = {
     seed: arenaSeedInput.value.trim() || "arena-seed",
@@ -394,7 +396,16 @@ pauseButton.addEventListener("click", togglePause);
 stopButton.addEventListener("click", () => {
   replay.cancel();
   if (activeAppMode === "arena") {
-    arenaController.stop();
+    if (currentArenaState.status === "replay") {
+      arenaController.exitReplay();
+      exitArenaReplay();
+    } else {
+      arenaController.stop();
+      activeAppMode = "training";
+      arenaResultsSection.hidden = true;
+      updateInterface(currentState);
+      updateGarageAndArenaControls();
+    }
   } else {
     controller.stop();
   }
@@ -424,11 +435,23 @@ document.addEventListener("keydown", (event) => {
   } else if (event.key.toLowerCase() === "r") {
     toggleReplay();
   } else if (event.key === "1") {
-    controller.setMode("normal");
+    if (activeAppMode === "arena") {
+      arenaController.setMode("normal");
+    } else {
+      controller.setMode("normal");
+    }
   } else if (event.key === "2") {
-    controller.setMode("fast");
+    if (activeAppMode === "arena") {
+      arenaController.setMode("fast");
+    } else {
+      controller.setMode("fast");
+    }
   } else if (event.key === "3") {
-    controller.setMode("headless");
+    if (activeAppMode === "arena") {
+      arenaController.setMode("headless");
+    } else {
+      controller.setMode("headless");
+    }
   }
 });
 
@@ -600,6 +623,15 @@ function updateGarageAndArenaControls(): void {
   } else {
     arenaBlockedMsg.hidden = true;
   }
+
+  // Uaktualnij przyciski w kartach zapisanych biegów gdy stan Areny ulega zmianie
+  const cardResumeButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
+    ".run-card-resume-btn"
+  );
+  const isTrainingOrArenaActive = trainingIsActive || activeAppMode === "arena";
+  for (const btn of cardResumeButtons) {
+    btn.disabled = isTrainingOrArenaActive;
+  }
 }
 
 async function refreshSavedRunsList(): Promise<void> {
@@ -748,6 +780,7 @@ function renderSavedRunsGrid(): void {
     resumeBtn.type = "button";
     resumeBtn.textContent = "Wznów";
     const isRunning =
+      activeAppMode === "arena" ||
       currentState.status === "running" ||
       currentState.status === "paused" ||
       currentState.status === "replay";
@@ -817,6 +850,7 @@ function updateCompareButton(): void {
 
 async function resumeRun(run: SavedRun): Promise<void> {
   const isRunning =
+    activeAppMode === "arena" ||
     currentState.status === "running" ||
     currentState.status === "paused" ||
     currentState.status === "replay";
@@ -878,6 +912,7 @@ function downloadJson(content: string, filename: string): void {
 
 function updateArenaInterface(state: ArenaState): void {
   const active = state.status === "running" || state.status === "paused";
+  const inReplay = state.status === "replay";
   configFields.disabled = true;
   randomSeedButton.disabled = true;
   startButton.disabled = true;
@@ -885,13 +920,23 @@ function updateArenaInterface(state: ArenaState): void {
   startArenaBtn.disabled = true;
 
   status.dataset.status = state.status;
-  statusText.textContent = state.status === "running" ? "Arena aktywna" : state.status === "paused" ? "Arena: pauza" : state.status === "finished" ? "Arena zakończona" : "Arena zatrzymana";
+  statusText.textContent =
+    state.status === "running"
+      ? "Arena aktywna"
+      : state.status === "paused"
+        ? "Arena: pauza"
+        : state.status === "replay"
+          ? "Replay Areny"
+          : state.status === "finished"
+            ? "Arena zakończona"
+            : "Arena zatrzymana";
   runMessage.textContent = state.message;
 
   pauseButton.disabled = state.status !== "running" && state.status !== "paused";
   pauseButton.textContent = state.status === "paused" ? "Wznów" : "Pauza";
-  stopButton.disabled = state.status !== "running" && state.status !== "paused";
-  replayButton.disabled = true;
+  stopButton.disabled = state.status !== "running" && state.status !== "paused" && !inReplay;
+  replayButton.disabled = !inReplay;
+  replayButton.textContent = inReplay ? "Zakończ replay" : "Replay rekordu";
   replayTrackSelect.hidden = true;
 
   for (const button of modeButtons) {
@@ -1049,9 +1094,11 @@ function playArenaParticipantReplay(
   arenaResultsSection.hidden = true;
   window.scrollTo({ top: 0, behavior: "smooth" });
 
-  status.dataset.status = "replay";
-  statusText.textContent = `Replay Areny: ${participant.name}`;
-  runMessage.textContent = `Odtwarzanie przejazdu: ${participant.name} (${profileLabelPl(profile)})`;
+  arenaController.enterReplay(`Odtwarzanie przejazdu: ${participant.name} (${profileLabelPl(profile)})`);
+
+  candidateId.textContent = `Replay · ${participant.name}`;
+  candidateProgress.textContent = `${profileLabelPl(profile)} · powtórka`;
+  distanceLabel.textContent = "Dystans replay";
 
   replay.play(
     trackRes.result.trace,
@@ -1065,6 +1112,7 @@ function playArenaParticipantReplay(
       currentDistance.textContent = formatDistance(frame.distance);
     },
     () => {
+      arenaController.exitReplay();
       exitArenaReplay();
     }
   );
@@ -1094,7 +1142,7 @@ function updateInterface(state: RunViewState): void {
     ".run-card-resume-btn"
   );
   for (const btn of cardResumeButtons) {
-    btn.disabled = active;
+    btn.disabled = active || activeAppMode === "arena";
   }
   const cardForkButtons = savedRunsGrid.querySelectorAll<HTMLButtonElement>(
     ".run-card-fork-btn"
@@ -1298,6 +1346,7 @@ function toggleReplay(): void {
   if (activeAppMode === "arena") {
     if (currentArenaState.status === "replay") {
       replay.cancel();
+      arenaController.exitReplay();
       exitArenaReplay();
     }
     return;

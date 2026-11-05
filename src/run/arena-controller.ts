@@ -142,6 +142,24 @@ export class ArenaController {
     this.emit();
   }
 
+  enterReplay(message: string): void {
+    this.state = {
+      ...this.state,
+      status: "replay",
+      message
+    };
+    this.emit();
+  }
+
+  exitReplay(): void {
+    this.state = {
+      ...this.state,
+      status: "finished",
+      message: this.state.results ? `Zawody zakończone! Zwycięzca: ${this.state.results[0]?.name ?? "—"}` : "Zawody zakończone"
+    };
+    this.emit();
+  }
+
   async startTournament(vehicles: GarageVehicle[], config: ArenaConfig): Promise<void> {
     if (vehicles.length < 2 || vehicles.length > 4) {
       throw new Error("Arena wymaga wyboru od 2 do 4 pojazdów.");
