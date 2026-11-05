@@ -641,7 +641,7 @@ function updateInterface(state: RunViewState): void {
 
   // Replay track select visibility and enablement
   replayTrackSelect.hidden = !isTriple;
-  replayTrackSelect.disabled = active || state.bestRecord === null;
+  replayTrackSelect.disabled = state.status === "replay" || state.bestRecord === null;
 
   candidateId.textContent =
     state.status === "replay"

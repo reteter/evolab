@@ -16,7 +16,7 @@ export interface ExportPayload {
 export function exportRunToJson(run: SavedRun): string {
   const payload: ExportPayload = {
     version: 3,
-    run: migrateSavedRun(run, false)
+    run: migrateSavedRun(run, true)
   };
   return JSON.stringify(payload, null, 2);
 }
