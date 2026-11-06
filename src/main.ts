@@ -140,7 +140,7 @@ let activeAppMode: "training" | "arena" = "training";
 let currentArenaState: ArenaState = arenaController.getState();
 let garageVehiclesCache: GarageVehicle[] = [];
 let selectedVehicleIdsForArena = new Set<string>();
-let selectedFounderIdsForRun: string[] = []; // Ordered array of selected garage vehicle IDs (1-4)
+let selectedFoundersForRun: GarageFounderInfo[] = []; // Ordered array of selected garage founders (1-4)
 
 let currentState = controller.getState();
 let renderedHistorySignature = "";
@@ -496,9 +496,6 @@ async function refreshGarageList(): Promise<void> {
       selectedVehicleIdsForArena.delete(id);
     }
   }
-  selectedFounderIdsForRun = selectedFounderIdsForRun.filter((id) =>
-    garageVehiclesCache.some((v) => v.id === id)
-  );
   pruneIncompatibleFounders();
   renderGarageFoundersSelector();
   renderGarageGrid();
@@ -518,10 +515,8 @@ function handleWheelCountModeChange(): void {
 
 function pruneIncompatibleFounders(): void {
   const allowed = allowedWheelCounts(wheelCountModeSelect.value as WheelCountMode);
-  selectedFounderIdsForRun = selectedFounderIdsForRun.filter((id) => {
-    const v = garageVehiclesCache.find((veh) => veh.id === id);
-    if (!v) return false;
-    const wheels = Math.min(4, Math.max(2, v.genome.genes.wheelCount || 2));
+  selectedFoundersForRun = selectedFoundersForRun.filter((founder) => {
+    const wheels = Math.min(4, Math.max(2, founder.genome.genes.wheelCount || 2));
     return allowed.includes(wheels);
   });
 }
@@ -534,11 +529,24 @@ function renderGarageFoundersSelector(): void {
   }
 
   const allowed = allowedWheelCounts(wheelCountModeSelect.value as WheelCountMode);
-  garageFoundersCount.textContent = `${selectedFounderIdsForRun.length}/4 wybranych`;
+  garageFoundersCount.textContent = `${selectedFoundersForRun.length}/4 wybranych`;
 
   garageFoundersList.replaceChildren();
 
-  if (garageVehiclesCache.length === 0) {
+  // Utwórz połączoną listę pojazdów: te z cache + te wybrane z wczytanej konfiguracji (np. zaimportowane lub usunięte z garażu)
+  const allAvailableFounders: GarageFounderInfo[] = garageVehiclesCache.map((v) => ({
+    id: v.id,
+    name: v.name,
+    genome: v.genome
+  }));
+
+  for (const preserved of selectedFoundersForRun) {
+    if (!allAvailableFounders.some((f) => f.id === preserved.id)) {
+      allAvailableFounders.push(preserved);
+    }
+  }
+
+  if (allAvailableFounders.length === 0) {
     const empty = document.createElement("p");
     empty.style.fontSize = "0.75rem";
     empty.style.color = "var(--text-muted, #7e9a9c)";
@@ -548,13 +556,13 @@ function renderGarageFoundersSelector(): void {
     return;
   }
 
-  for (const vehicle of garageVehiclesCache) {
+  for (const vehicle of allAvailableFounders) {
     const item = document.createElement("div");
     item.className = "garage-founder-item";
 
     const wheels = Math.min(4, Math.max(2, vehicle.genome.genes.wheelCount || 2));
     const isCompatible = allowed.includes(wheels);
-    const orderIndex = selectedFounderIdsForRun.indexOf(vehicle.id);
+    const orderIndex = selectedFoundersForRun.findIndex((f) => f.id === vehicle.id);
     const isSelected = orderIndex !== -1;
 
     if (!isCompatible) {
@@ -567,15 +575,19 @@ function renderGarageFoundersSelector(): void {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = isSelected;
-    checkbox.disabled = !isCompatible || (!isSelected && selectedFounderIdsForRun.length >= 4);
+    checkbox.disabled = !isCompatible || (!isSelected && selectedFoundersForRun.length >= 4);
 
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) {
-        if (!selectedFounderIdsForRun.includes(vehicle.id) && selectedFounderIdsForRun.length < 4) {
-          selectedFounderIdsForRun.push(vehicle.id);
+        if (!selectedFoundersForRun.some((f) => f.id === vehicle.id) && selectedFoundersForRun.length < 4) {
+          selectedFoundersForRun.push({
+            id: vehicle.id,
+            name: vehicle.name,
+            genome: JSON.parse(JSON.stringify(vehicle.genome))
+          });
         }
       } else {
-        selectedFounderIdsForRun = selectedFounderIdsForRun.filter((id) => id !== vehicle.id);
+        selectedFoundersForRun = selectedFoundersForRun.filter((f) => f.id !== vehicle.id);
       }
       renderGarageFoundersSelector();
     });
@@ -1018,9 +1030,13 @@ function populateFormConfig(config: RunConfig): void {
   mutationStrengthInput.value = String(Math.round(config.mutationStrength * 100));
 
   if (config.populationSource === "garage" && config.garageFounders) {
-    selectedFounderIdsForRun = config.garageFounders.map((f) => f.id);
+    selectedFoundersForRun = config.garageFounders.map((f) => ({
+      id: f.id,
+      name: f.name,
+      genome: JSON.parse(JSON.stringify(f.genome))
+    }));
   } else {
-    selectedFounderIdsForRun = [];
+    selectedFoundersForRun = [];
   }
 
   handleTrainingModeChange();
@@ -1542,17 +1558,11 @@ function readConfig(): RunConfig {
   let garageFounders: GarageFounderInfo[] | undefined;
 
   if (popSource === "garage") {
-    garageFounders = selectedFounderIdsForRun
-      .map((id) => {
-        const v = garageVehiclesCache.find((veh) => veh.id === id);
-        if (!v) return null;
-        return {
-          id: v.id,
-          name: v.name,
-          genome: JSON.parse(JSON.stringify(v.genome))
-        };
-      })
-      .filter((item): item is GarageFounderInfo => item !== null);
+    garageFounders = selectedFoundersForRun.map((f) => ({
+      id: f.id,
+      name: f.name,
+      genome: JSON.parse(JSON.stringify(f.genome))
+    }));
   }
 
   return {
