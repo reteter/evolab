@@ -53,6 +53,25 @@
                 </select>
               </label>
 
+              <label class="field" for="population-source">
+                <span>Źródło populacji</span>
+                <span class="field-hint">początkowe konstrukcje w pokoleniu 1</span>
+                <select id="population-source" name="populationSource">
+                  <option value="random">Losowa</option>
+                  <option value="garage">Z garażu</option>
+                </select>
+              </label>
+
+              <div class="garage-founders-container" id="garage-founders-container" hidden>
+                <div class="garage-founders-header">
+                  <span class="garage-founders-title">Wybierz 1–4 rodziców z garażu</span>
+                  <span class="garage-founders-count" id="garage-founders-count">0/4 wybranych</span>
+                </div>
+                <div class="garage-founders-list" id="garage-founders-list">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
+
               <label class="field field-seed" for="seed">
                 <span>Seed</span>
                 <span class="field-hint">ten sam seed — ten sam świat</span>
@@ -307,6 +326,9 @@
               <dd id="overall-best-value">0,0 m</dd>
               <span id="record-genome">czeka na pojazd</span>
               <div id="record-track-details" style="display: flex; flex-direction: column; gap: 2px; font-size: 0.75rem; margin-top: 4px;" hidden></div>
+              <button class="button button-small" id="add-record-to-garage-btn" type="button" style="margin-top: 8px; width: 100%;" disabled>
+                Dodaj rekordzistę do garażu
+              </button>
             </div>
             <div class="metric">
               <dt>Najlepszy teraz</dt>
@@ -419,6 +441,98 @@
             <div class="table-scroll">
               <table class="comparison-table">
                 <tbody id="comparison-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Sekcja: Garaż rekordzistów i Arena -->
+        <section class="panel garage-panel" id="garage-section" aria-labelledby="garage-title">
+          <div class="panel-heading garage-heading">
+            <div>
+              <p class="step-label">Pojazdy i turnieje</p>
+              <h2 id="garage-title">Garaż rekordzistów</h2>
+            </div>
+            <div class="garage-top-actions">
+              <input type="file" id="import-vehicle-input" accept=".json" hidden />
+              <button class="button button-small" id="import-vehicle-btn" type="button">
+                Importuj pojazd JSON
+              </button>
+            </div>
+          </div>
+
+          <div class="arena-setup-box" id="arena-setup-box">
+            <div class="arena-setup-header">
+              <h3>Arena zawodów (2–4 konstrukcje)</h3>
+              <p class="arena-hint">
+                Wybierz 2–4 pojazdy z garażu za pomocą checkboxów, ustaw seed areny i trudność, a następnie wystaw je do wyścigu na 3 trasach (Łagodny, Strome wzgórza, Wyboisty).
+              </p>
+            </div>
+            <div class="arena-setup-controls">
+              <label class="field field-seed" for="arena-seed">
+                <span>Seed Areny</span>
+                <span class="input-action">
+                  <input id="arena-seed" type="text" value="arena-grand-prix-1" maxlength="80" autocomplete="off" />
+                  <button class="button button-small" id="arena-random-seed" type="button">Losuj</button>
+                </span>
+              </label>
+
+              <label class="field field-range" for="arena-difficulty">
+                <span>
+                  Trudność
+                  <output id="arena-difficulty-output" for="arena-difficulty">Trudność: 3/5</output>
+                </span>
+                <input id="arena-difficulty" type="range" value="3" min="1" max="5" step="1" />
+              </label>
+
+              <div class="arena-start-action">
+                <button class="button button-primary" id="start-arena-btn" type="button" disabled>
+                  Uruchom Arenę (0)
+                </button>
+                <span class="arena-blocked-msg" id="arena-blocked-msg" hidden>
+                  Zatrzymaj trening, aby uruchomić Arenę
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="garage-vehicles-grid" id="garage-vehicles-grid">
+            <p class="garage-empty" id="garage-empty">Brak pojazdów w garażu. Dodaj rekordzistę z bieżącego lub zapisanego treningu.</p>
+          </div>
+        </section>
+
+        <!-- Sekcja: Wyniki Areny -->
+        <section class="panel arena-results-panel" id="arena-results-section" aria-labelledby="arena-results-title" hidden>
+          <div class="panel-heading">
+            <div>
+              <p class="step-label">Zawody zakończone</p>
+              <h2 id="arena-results-title">Wyniki i Podium Areny</h2>
+            </div>
+            <div class="arena-results-actions">
+              <button class="button button-small button-primary" id="back-to-training-btn" type="button">
+                Powrót do treningu
+              </button>
+            </div>
+          </div>
+
+          <div class="podium-display" id="podium-display"></div>
+
+          <div class="data-table-wrap">
+            <div class="table-scroll">
+              <table class="arena-results-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Miejsce</th>
+                    <th scope="col">Pojazd</th>
+                    <th scope="col">Punktacja</th>
+                    <th scope="col">Śr. prędkość</th>
+                    <th scope="col">Łagodny</th>
+                    <th scope="col">Strome wzgórza</th>
+                    <th scope="col">Wyboisty</th>
+                    <th scope="col">Powtórka (Replay)</th>
+                  </tr>
+                </thead>
+                <tbody id="arena-results-table-body"></tbody>
               </table>
             </div>
           </div>

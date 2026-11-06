@@ -1,4 +1,5 @@
 import type {
+  GarageVehicle,
   Genome,
   RunCheckpoint,
   RunConfig,
@@ -7,15 +8,92 @@ import type {
   WheelCountMode
 } from "./indexed-db";
 import { validateRunConfig } from "../domain/evolution";
+import { APP_BUILD_ID } from "../domain/types";
 
 export interface ExportPayload {
-  version: 3;
+  version: 4;
   run: SavedRun;
+}
+
+export interface VehicleExportPayload {
+  version: 1;
+  vehicle: GarageVehicle;
+}
+
+export function exportVehicleToJson(vehicle: GarageVehicle): string {
+  const payload: VehicleExportPayload = {
+    version: 1,
+    vehicle: {
+      ...vehicle,
+      genome: migrateGenome(vehicle.genome)
+    }
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+export function importVehicleFromJson(jsonText: string): GarageVehicle {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new Error("Plik nie jest poprawnym plikiem JSON.");
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("Nieprawidłowa struktura pliku importu.");
+  }
+
+  const record = parsed as Record<string, unknown>;
+  if (record.version !== 1) {
+    throw new Error(`Nieobsługiwana wersja pliku pojazdu (${String(record.version)}). Oczekiwana wersja: 1.`);
+  }
+
+  if (typeof record.vehicle !== "object" || record.vehicle === null) {
+    throw new Error("Brak danych pojazdu (pole 'vehicle') w pliku importu.");
+  }
+
+  const rawVehicle = record.vehicle as Record<string, any>;
+  if (typeof rawVehicle.name !== "string" || !rawVehicle.name.trim()) {
+    throw new Error("Nieprawidłowa nazwa pojazdu w pliku.");
+  }
+
+  if (!rawVehicle.genome || typeof rawVehicle.genome !== "object") {
+    throw new Error("Brak genomu pojazdu w pliku.");
+  }
+
+  const migratedGenome = migrateGenome(rawVehicle.genome);
+  const now = Date.now();
+  const rawName = rawVehicle.name.trim();
+  const name = rawName.endsWith("(import)") ? rawName : `${rawName} (import)`;
+
+  const sourceRun = rawVehicle.sourceRun && typeof rawVehicle.sourceRun === "object"
+    ? {
+        runId: typeof rawVehicle.sourceRun.runId === "string" ? rawVehicle.sourceRun.runId : undefined,
+        seed: typeof rawVehicle.sourceRun.seed === "string" ? rawVehicle.sourceRun.seed : "nieznany",
+        generation: typeof rawVehicle.sourceRun.generation === "number" ? rawVehicle.sourceRun.generation : 1,
+        trainingMode: rawVehicle.sourceRun.trainingMode === "triple" ? "triple" as const : "single" as const,
+        buildId: typeof rawVehicle.sourceRun.buildId === "string" ? rawVehicle.sourceRun.buildId : APP_BUILD_ID
+      }
+    : {
+        seed: "import",
+        generation: 1,
+        trainingMode: "single" as const,
+        buildId: APP_BUILD_ID
+      };
+
+  return {
+    id: crypto.randomUUID(),
+    name,
+    createdAt: typeof rawVehicle.createdAt === "number" ? rawVehicle.createdAt : now,
+    updatedAt: now,
+    sourceRun,
+    genome: migratedGenome
+  };
 }
 
 export function exportRunToJson(run: SavedRun): string {
   const payload: ExportPayload = {
-    version: 3,
+    version: 4,
     run: migrateSavedRun(run, true)
   };
   return JSON.stringify(payload, null, 2);
@@ -134,10 +212,20 @@ export function migrateGenome(genome: any): Genome {
 export function migrateConfig(config: any): RunConfig {
   const wheelCountMode: WheelCountMode = config.wheelCountMode ?? "2";
   const trainingMode = config.trainingMode ?? "single";
+  const populationSource = config.populationSource ?? "random";
+  const garageFounders = Array.isArray(config.garageFounders)
+    ? config.garageFounders.map((f: any) => ({
+        ...f,
+        genome: migrateGenome(f.genome)
+      }))
+    : undefined;
+
   return {
     ...config,
     wheelCountMode,
-    trainingMode
+    trainingMode,
+    populationSource,
+    ...(garageFounders ? { garageFounders } : {})
   };
 }
 
@@ -198,8 +286,8 @@ export function importRunFromJson(jsonText: string): SavedRun {
   }
 
   const record = parsed as Record<string, unknown>;
-  if (record.version !== 1 && record.version !== 2 && record.version !== 3) {
-    throw new Error(`Nieobsługiwana wersja pliku (${String(record.version)}). Oczekiwana wersja: 1, 2 lub 3.`);
+  if (record.version !== 1 && record.version !== 2 && record.version !== 3 && record.version !== 4) {
+    throw new Error(`Nieobsługiwana wersja pliku (${String(record.version)}). Oczekiwana wersja: 1, 2, 3 lub 4.`);
   }
 
   if (typeof record.run !== "object" || record.run === null) {

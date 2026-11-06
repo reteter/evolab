@@ -144,10 +144,120 @@ export function validateRunConfig(config: RunConfig): string[] {
   ) {
     issues.push("Nieprawidłowy tryb treningu.");
   }
+  if (
+    config.populationSource !== undefined &&
+    config.populationSource !== "random" &&
+    config.populationSource !== "garage"
+  ) {
+    issues.push("Nieprawidłowe źródło populacji.");
+  }
+  if (config.populationSource === "garage") {
+    const founders = config.garageFounders ?? [];
+    if (founders.length < 1 || founders.length > 4) {
+      issues.push("Wybierz od 1 do 4 konstrukcji z garażu.");
+    }
+    const allowed = allowedWheelCounts(config.wheelCountMode);
+    for (const founder of founders) {
+      const wheels = founder.genome?.genes?.wheelCount;
+      if (typeof wheels !== "number" || !allowed.includes(wheels)) {
+        issues.push(`Konstrukcja "${founder.name}" nie pasuje do wybranego trybu liczby kół (${config.wheelCountMode}).`);
+        break;
+      }
+    }
+    const k = founders.length;
+    const randomCount = Math.floor(config.populationSize * 0.2);
+    if (config.populationSize < k + randomCount) {
+      issues.push(`Populacja (${config.populationSize}) jest zbyt mała dla wybranych rodziców i 20% osobników losowych (wymagane min. ${k + randomCount}).`);
+    }
+  }
   return issues;
 }
 
+export function createInitialPopulationFromGarage(
+  config: RunConfig,
+  founders: readonly { id: string; name: string; genome: Genome }[]
+): Genome[] {
+  const k = founders.length;
+  const n = config.populationSize;
+  const randomCount = Math.floor(n * 0.2);
+  const offspringCount = n - k - randomCount;
+
+  const population: Genome[] = [];
+
+  // 1. K nienaruszonych kopii rodziców
+  for (let i = 0; i < k; i++) {
+    const parent = founders[i]!;
+    population.push({
+      id: genomeId(1, population.length + 1),
+      generation: 1,
+      genes: JSON.parse(JSON.stringify(parent.genome.genes)),
+      lineage: { kind: "founder" }
+    });
+  }
+
+  // 2. Potomkowie
+  for (let i = 0; i < offspringCount; i++) {
+    const childIndex = population.length + 1;
+    let crossedGenes: VehicleGenes;
+
+    if (k === 1) {
+      // Jeden rodzic: kopia jego genów
+      crossedGenes = JSON.parse(JSON.stringify(founders[0]!.genome.genes));
+    } else {
+      // Kilku rodziców: losowanie dwóch różnych rodziców równomiernie
+      const selectionRng = createRng(
+        deriveSeed(config.seed, "garage-init", "parent-selection", childIndex)
+      );
+      const parent1Idx = Math.floor(selectionRng() * k);
+      let parent2Idx = Math.floor(selectionRng() * (k - 1));
+      if (parent2Idx >= parent1Idx) {
+        parent2Idx++;
+      }
+
+      const parent1 = founders[parent1Idx]!;
+      const parent2 = founders[parent2Idx]!;
+
+      const crossoverRng = createRng(
+        deriveSeed(config.seed, "garage-init", "crossover", childIndex)
+      );
+      crossedGenes = crossoverGenes(parent1.genome.genes, parent2.genome.genes, crossoverRng);
+    }
+
+    const mutationRng = createRng(
+      deriveSeed(config.seed, "garage-init", "mutation", childIndex)
+    );
+    const mutatedGenes = mutateGenes(crossedGenes, config, mutationRng);
+
+    population.push({
+      id: genomeId(1, childIndex),
+      generation: 1,
+      genes: mutatedGenes,
+      lineage: { kind: "founder" }
+    });
+  }
+
+  // 3. Losowe osobniki (20%)
+  for (let i = 0; i < randomCount; i++) {
+    const childIndex = population.length + 1;
+    const randomRng = createRng(
+      deriveSeed(config.seed, "garage-init", "random", childIndex)
+    );
+    population.push({
+      id: genomeId(1, childIndex),
+      generation: 1,
+      genes: randomGenes(randomRng, config.wheelCountMode),
+      lineage: { kind: "founder" }
+    });
+  }
+
+  return population;
+}
+
 export function createInitialPopulation(config: RunConfig): Genome[] {
+  if (config.populationSource === "garage" && config.garageFounders && config.garageFounders.length > 0) {
+    return createInitialPopulationFromGarage(config, config.garageFounders);
+  }
+
   return Array.from({ length: config.populationSize }, (_, index) => ({
     id: genomeId(1, index + 1),
     generation: 1,

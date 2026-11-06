@@ -20,6 +20,14 @@ export const TRIPLE_TRACK_PROFILES: readonly TerrainProfile[] = [
 
 export type WheelCountMode = "2" | "2-3" | "2-4";
 
+export type PopulationSource = "random" | "garage";
+
+export interface GarageFounderInfo {
+  id: string;
+  name: string;
+  genome: Genome;
+}
+
 export interface RunConfig {
   seed: string;
   populationSize: number;
@@ -30,6 +38,8 @@ export interface RunConfig {
   difficulty: number;
   wheelCountMode: WheelCountMode;
   trainingMode?: TrainingMode;
+  populationSource?: PopulationSource;
+  garageFounders?: GarageFounderInfo[];
 }
 
 export interface RunManifest {
@@ -227,7 +237,8 @@ export function createManifest(config: RunConfig): RunManifest {
     traceEverySteps: TRACE_EVERY_STEPS,
     config: {
       ...config,
-      trainingMode
+      trainingMode,
+      populationSource: config.populationSource ?? "random"
     }
   };
 }

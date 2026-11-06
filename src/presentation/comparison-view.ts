@@ -79,6 +79,23 @@ export class ComparisonView {
             ? "Trzy trasy"
             : "Jedna trasa"
       },
+      {
+        label: "Źródło populacji",
+        getValue: (r) =>
+          (r.checkpoint.config.populationSource ?? "random") === "garage"
+            ? "Z garażu"
+            : "Losowa"
+      },
+      {
+        label: "Rodzice startowi",
+        getValue: (r) => {
+          const founders = r.checkpoint.config.garageFounders;
+          if (r.checkpoint.config.populationSource === "garage" && founders && founders.length > 0) {
+            return founders.map((f, i) => `${i + 1}. ${f.name}`).join(", ");
+          }
+          return "— (start losowy)";
+        }
+      },
       { label: "Seed", getValue: (r) => r.checkpoint.config.seed },
       {
         label: "Profil terenu",
